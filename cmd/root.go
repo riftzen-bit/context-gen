@@ -7,25 +7,8 @@ import (
 
 	"github.com/paul/context-gen/analyzer"
 	"github.com/paul/context-gen/generator"
+	"github.com/paul/context-gen/ui"
 )
-
-// ANSI color codes
-const (
-	colorReset  = "\033[0m"
-	colorBold   = "\033[1m"
-	colorRed    = "\033[31m"
-	colorGreen  = "\033[32m"
-	colorYellow = "\033[33m"
-)
-
-func bold(s string) string   { return colorBold + s + colorReset }
-func green(s string) string  { return colorGreen + s + colorReset }
-func yellow(s string) string { return colorYellow + s + colorReset }
-func red(s string) string    { return colorRed + s + colorReset }
-
-func errorf(format string, a ...any) {
-	fmt.Fprintf(os.Stderr, red("Error: ")+format+"\n", a...)
-}
 
 func Execute() {
 	args := os.Args[1:]
@@ -49,16 +32,18 @@ func Execute() {
 	case "preview":
 		err = runPreview(args[1:])
 	case "version":
-		fmt.Println("context-gen v0.1.0")
+		fmt.Println("context-gen " + ui.Version)
+		fmt.Println("Copyright (c) 2026 Paul")
+		fmt.Println("Licensed under the MIT License")
 	default:
-		errorf("Unknown command: %s", args[0])
+		fmt.Println(ui.FormatError(fmt.Sprintf("Unknown command: %s", args[0])))
 		fmt.Println()
 		printUsage()
 		os.Exit(1)
 	}
 
 	if err != nil {
-		errorf("%v", err)
+		fmt.Println(ui.FormatError(err.Error()))
 		os.Exit(1)
 	}
 }
@@ -120,7 +105,8 @@ func hasDryRun(args []string) bool {
 
 // scanAndDetect runs the scan + detect pipeline on absDir, printing progress.
 func scanAndDetect(absDir string) (*analyzer.ProjectInfo, error) {
-	fmt.Printf("%s %s\n", bold("Scanning"), absDir)
+	fmt.Println()
+	fmt.Printf("%s %s\n", ui.Bold.Render("Scanning"), absDir)
 
 	scan, err := analyzer.Scan(absDir)
 	if err != nil {
@@ -132,7 +118,10 @@ func scanAndDetect(absDir string) (*analyzer.ProjectInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("detection error: %w", err)
 	}
-	printDetectionSummary(info)
+
+	fmt.Println()
+	fmt.Println(ui.Bold.Render("Detection Results"))
+	fmt.Println(ui.FormatResults(info))
 
 	return info, nil
 }
@@ -196,24 +185,24 @@ func runInit(args []string) error {
 
 	// Write files (init refuses to overwrite)
 	fmt.Println()
-	fmt.Println(bold("Writing files"))
+	fmt.Println(ui.Bold.Render("Writing files"))
 	for name, content := range files {
 		outPath := filepath.Join(outDir, name)
 
 		if _, err := os.Stat(outPath); err == nil {
-			fmt.Printf("  %s %s already exists, writing to %s.generated\n", yellow("SKIP"), name, name)
+			fmt.Println(ui.FormatFileSkipped(name, fmt.Sprintf("already exists, writing to %s.generated", name)))
 			outPath = outPath + ".generated"
 		}
 
 		if err := os.WriteFile(outPath, []byte(content), 0644); err != nil {
-			errorf("writing %s: %v", name, err)
+			fmt.Println(ui.FormatError(fmt.Sprintf("writing %s: %v", name, err)))
 			continue
 		}
-		fmt.Printf("  %s %s\n", green("CREATE"), outPath)
+		fmt.Println(ui.FormatFileCreated(outPath))
 	}
 
 	fmt.Println()
-	fmt.Println(green("Done!") + " Review the generated files and customize them for your project.")
+	fmt.Println(ui.Success.Render("Done!") + " Review the generated files and customize them for your project.")
 	return nil
 }
 
@@ -238,12 +227,12 @@ func runUpdate(args []string) error {
 	format := detectExistingFormat(outDir)
 	if format == "" {
 		format = formatFlag
-		fmt.Println(yellow("No existing context files found. Generating with format: " + string(format)))
+		fmt.Println(ui.Warning.Render("No existing context files found. Generating with format: " + string(format)))
 	} else {
 		if hasFlag(args, "--format", "-f") {
 			format = formatFlag
 		}
-		fmt.Printf("  Detected existing format: %s\n", bold(string(format)))
+		fmt.Printf("  Detected existing format: %s\n", ui.Bold.Render(string(format)))
 	}
 
 	info, err := scanAndDetect(absDir)
@@ -255,33 +244,33 @@ func runUpdate(args []string) error {
 
 	// Write files (update overwrites existing)
 	fmt.Println()
-	fmt.Println(bold("Updating files"))
+	fmt.Println(ui.Bold.Render("Updating files"))
 	for name, content := range files {
 		outPath := filepath.Join(outDir, name)
 
-		action := green("CREATE")
+		action := ui.FormatFileCreated
 		if _, err := os.Stat(outPath); err == nil {
-			action = green("UPDATE")
+			action = ui.FormatFileUpdated
 		}
 
 		if err := os.WriteFile(outPath, []byte(content), 0644); err != nil {
-			errorf("writing %s: %v", name, err)
+			fmt.Println(ui.FormatError(fmt.Sprintf("writing %s: %v", name, err)))
 			continue
 		}
-		fmt.Printf("  %s %s\n", action, outPath)
+		fmt.Println(action(outPath))
 	}
 
 	// Clean up .generated files if the real file is now written
 	for name := range files {
 		genPath := filepath.Join(outDir, name+".generated")
 		if _, err := os.Stat(genPath); err == nil {
-			fmt.Printf("  %s removing stale %s\n", yellow("CLEAN"), name+".generated")
+			fmt.Println(ui.FormatFileSkipped(name+".generated", "removing stale file"))
 			os.Remove(genPath)
 		}
 	}
 
 	fmt.Println()
-	fmt.Println(green("Done!") + " Context files have been updated.")
+	fmt.Println(ui.Success.Render("Done!") + " Context files have been updated.")
 	return nil
 }
 
@@ -344,67 +333,17 @@ func fileExists(path string) bool {
 
 func printDryRun(files map[string]string) {
 	fmt.Println()
-	fmt.Println(bold("Preview (dry run)"))
+	fmt.Println(ui.Bold.Render("Preview (dry run)"))
 	for name, content := range files {
-		fmt.Printf("\n%s %s %s\n", yellow("---"), bold(name), yellow("---"))
+		fmt.Printf("\n%s %s %s\n", ui.Warning.Render("---"), ui.Bold.Render(name), ui.Warning.Render("---"))
 		fmt.Print(content)
 	}
 }
 
-func printDetectionSummary(info *analyzer.ProjectInfo) {
-	fmt.Println()
-	fmt.Println(bold("Detection Results"))
-
-	if len(info.Languages) > 0 {
-		fmt.Printf("  Languages: ")
-		for i, l := range info.Languages {
-			if i > 0 {
-				fmt.Print(", ")
-			}
-			fmt.Printf("%s (%.0f%%)", l.Name, l.Percentage)
-		}
-		fmt.Println()
-	}
-
-	if len(info.Frameworks) > 0 {
-		fmt.Printf("  Frameworks: %s\n", joinSlice(info.Frameworks))
-	}
-	if len(info.BuildTools) > 0 {
-		fmt.Printf("  Build: %s\n", joinSlice(info.BuildTools))
-	}
-	if len(info.PackageManagers) > 0 {
-		pms := ""
-		for eco, pm := range info.PackageManagers {
-			if pms != "" {
-				pms += ", "
-			}
-			pms += eco + ":" + pm
-		}
-		fmt.Printf("  Package Managers: %s\n", pms)
-	}
-	if len(info.TestTools) > 0 {
-		fmt.Printf("  Testing: %s\n", joinSlice(info.TestTools))
-	}
-	if len(info.Linters) > 0 {
-		fmt.Printf("  Linting: %s\n", joinSlice(info.Linters))
-	}
-}
-
-func joinSlice(s []string) string {
-	result := ""
-	for i, v := range s {
-		if i > 0 {
-			result += ", "
-		}
-		result += v
-	}
-	return result
-}
-
 func printUsage() {
-	fmt.Println(bold("context-gen") + " - Generate AI context files for your codebase")
+	fmt.Println(ui.Bold.Render("context-gen") + " - Generate AI context files for your codebase")
 	fmt.Println()
-	fmt.Println(bold("Usage:"))
+	fmt.Println(ui.Bold.Render("Usage:"))
 	fmt.Println("  context-gen                          Interactive mode (menu-driven)")
 	fmt.Println("  context-gen init [flags]              Scan project and generate context files")
 	fmt.Println("  context-gen update [flags]            Re-scan and regenerate context files")
@@ -412,11 +351,11 @@ func printUsage() {
 	fmt.Println("  context-gen version                   Show version")
 	fmt.Println("  context-gen help                      Show this help")
 	fmt.Println()
-	fmt.Println(bold("Flags:"))
+	fmt.Println(ui.Bold.Render("Flags:"))
 	fmt.Println("  -d, --dir <path>       Target directory (default: current directory)")
 	fmt.Println("  -f, --format <type>    Output format: claude, cursor, both (default: both)")
 	fmt.Println("  -o, --output <path>    Output directory (default: scanned directory)")
 	fmt.Println("      --dry-run          Preview without writing (init only)")
 	fmt.Println()
-	fmt.Println(bold("Tip:") + " Just run " + bold("context-gen") + " without arguments for interactive mode!")
+	fmt.Println(ui.Bold.Render("Tip:") + " Just run " + ui.Bold.Render("context-gen") + " without arguments for interactive mode!")
 }

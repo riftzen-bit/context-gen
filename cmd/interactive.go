@@ -7,11 +7,13 @@ import (
 	"os"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/paul/context-gen/generator"
+	"github.com/paul/context-gen/ui"
 )
 
-// reader is the input source for interactive prompts. Defaults to os.Stdin.
-// Can be replaced in tests.
+// reader is the input source for interactive prompts (fallback mode).
 var reader io.Reader = os.Stdin
 
 func newScanner() *bufio.Scanner {
@@ -20,15 +22,130 @@ func newScanner() *bufio.Scanner {
 
 // runInteractive starts the interactive menu loop.
 func runInteractive() {
+	if !ui.IsTTY() {
+		runInteractiveFallback()
+		return
+	}
+
+	fmt.Println()
+	fmt.Println(ui.Banner())
+
+	for {
+		menuItems := []ui.MenuItem{
+			{Title: "Generate context files", Key: "init"},
+			{Title: "Update existing files", Key: "update"},
+			{Title: "Preview output", Key: "preview"},
+			{Title: "Help", Key: "help"},
+			{Title: "Exit", Key: "exit"},
+		}
+		menu := ui.NewMenuModel("What would you like to do?", menuItems)
+
+		p := tea.NewProgram(menu)
+		result, err := p.Run()
+		if err != nil {
+			// Bubbletea failed — fall back to plain mode
+			runInteractiveFallback()
+			return
+		}
+
+		m := result.(ui.MenuModel)
+		if !m.Chosen() {
+			fmt.Println()
+			return
+		}
+
+		switch m.Selected() {
+		case 0:
+			interactiveInitTUI()
+		case 1:
+			interactiveUpdateTUI()
+		case 2:
+			interactivePreviewTUI()
+		case 3:
+			fmt.Println()
+			printUsage()
+		case 4:
+			fmt.Println()
+			fmt.Println(ui.Success.Render("Bye!"))
+			return
+		}
+
+		fmt.Println()
+		fmt.Print(ui.Subtle.Render("Press Enter to continue..."))
+		fmt.Scanln()
+	}
+}
+
+func interactiveInitTUI() {
+	dir := promptDirTUI()
+	format := promptFormatTUI()
+	if format == "" {
+		return
+	}
+
+	args := []string{"-d", dir, "-f", format}
+	if err := runInit(args); err != nil {
+		fmt.Println(ui.FormatError(err.Error()))
+	}
+}
+
+func interactiveUpdateTUI() {
+	dir := promptDirTUI()
+
+	args := []string{"-d", dir}
+	if err := runUpdate(args); err != nil {
+		fmt.Println(ui.FormatError(err.Error()))
+	}
+}
+
+func interactivePreviewTUI() {
+	dir := promptDirTUI()
+	format := promptFormatTUI()
+	if format == "" {
+		return
+	}
+
+	args := []string{"-d", dir, "-f", format}
+	if err := runPreview(args); err != nil {
+		fmt.Println(ui.FormatError(err.Error()))
+	}
+}
+
+func promptDirTUI() string {
+	m := ui.NewDirPromptModel(".")
+	p := tea.NewProgram(m)
+	result, err := p.Run()
+	if err != nil {
+		return "."
+	}
+	return result.(ui.DirPromptModel).Value()
+}
+
+func promptFormatTUI() string {
+	m := ui.NewFormatSelectModel()
+	p := tea.NewProgram(m)
+	result, err := p.Run()
+	if err != nil {
+		return "both"
+	}
+	fm := result.(ui.FormatSelectModel)
+	if !fm.Chosen() {
+		return ""
+	}
+	return fm.SelectedFormat()
+}
+
+// runInteractiveFallback runs the old-style non-TUI interactive mode.
+func runInteractiveFallback() {
 	scanner := newScanner()
 
 	fmt.Println()
-	fmt.Println(bold("context-gen") + " v0.1.0")
+	fmt.Println("context-gen " + ui.Version)
 	fmt.Println("Generate AI context files for your codebase")
 
 	for {
 		fmt.Println()
-		fmt.Println(bold("What would you like to do?"))
+		fmt.Println("What would you like to do?")
 		fmt.Println()
 		fmt.Println("  1. Generate context files (first time)")
 		fmt.Println("  2. Update existing context files")
@@ -39,7 +156,6 @@ func runInteractive() {
 
 		choice := promptChoice(scanner, "> ", 1, 5)
 		if choice == -1 {
-			// EOF (e.g. Ctrl+D)
 			fmt.Println()
 			return
 		}
@@ -56,7 +172,7 @@ func runInteractive() {
 			printUsage()
 		case 5:
 			fmt.Println()
-			fmt.Println(green("Bye!"))
+			fmt.Println("Bye!")
 			return
 		}
 
@@ -72,7 +188,7 @@ func interactiveInit(scanner *bufio.Scanner) {
 
 	args := []string{"-d", dir, "-f", string(format)}
 	if err := runInit(args); err != nil {
-		errorf("%v", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 	}
 }
 
@@ -81,7 +197,7 @@ func interactiveUpdate(scanner *bufio.Scanner) {
 
 	args := []string{"-d", dir}
 	if err := runUpdate(args); err != nil {
-		errorf("%v", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 	}
 }
 
@@ -91,13 +207,13 @@ func interactivePreview(scanner *bufio.Scanner) {
 
 	args := []string{"-d", dir, "-f", string(format)}
 	if err := runPreview(args); err != nil {
-		errorf("%v", err)
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 	}
 }
 
 func promptFormat(scanner *bufio.Scanner) generator.Format {
 	fmt.Println()
-	fmt.Println(bold("Select format:"))
+	fmt.Println("Select format:")
 	fmt.Println()
 	fmt.Println("  1. Claude (CLAUDE.md)")
 	fmt.Println("  2. Cursor (.cursorrules)")
@@ -143,12 +259,11 @@ func promptChoice(scanner *bufio.Scanner, prompt string, min, max int) int {
 			return n
 		}
 
-		fmt.Printf("  %s Please enter a number between %d and %d\n", red("!"), min, max)
+		fmt.Printf("  ! Please enter a number between %d and %d\n", min, max)
 	}
 }
 
 // promptString displays a prompt with an optional default value and reads a string.
-// Returns the default value if the user presses Enter without typing anything.
 func promptString(scanner *bufio.Scanner, prompt, defaultVal string) string {
 	fmt.Println()
 	if defaultVal != "" {
