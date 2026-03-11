@@ -1,0 +1,42 @@
+package analyzer
+
+// ProjectInfo holds all detected information about a project.
+type ProjectInfo struct {
+	RootPath     string
+	Languages    []Language
+	Frameworks   []string
+	BuildTools   []string
+	TestTools    []string
+	Linters      []string
+	PackageManagers map[string]string // ecosystem -> manager (e.g. "js" -> "pnpm", "python" -> "poetry")
+	HasDocker    bool
+	HasCI        bool
+	CIProvider   string
+	Structure    DirStructure
+	Conventions  []Convention
+}
+
+// Language represents a detected programming language with file count.
+type Language struct {
+	Name       string
+	Extension  string
+	FileCount  int
+	Percentage float64
+}
+
+// DirStructure represents the project's directory layout.
+type DirStructure struct {
+	TopLevelDirs []string
+	EntryPoints  []string // main files, index files
+	ConfigFiles  []string
+	TotalFiles   int
+	TotalDirs    int
+}
+
+// Convention represents a detected coding convention.
+type Convention struct {
+	Category    string // "naming", "imports", "error_handling", "structure"
+	Description string
+	Confidence  float64 // 0.0 - 1.0
+	Examples    []string
+}
