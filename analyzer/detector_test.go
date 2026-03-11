@@ -585,6 +585,39 @@ func TestDetectFromPackageJSON_PackageManagerDetection(t *testing.T) {
 	}
 }
 
+func TestDetect_PopulatesName(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "go.mod", "module github.com/test/myproject\n\ngo 1.21\n")
+	writeFile(t, dir, "main.go", "package main\n")
+
+	scan, _ := Scan(dir)
+	info, err := Detect(dir, scan)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if info.Name != "myproject" {
+		t.Errorf("Name = %q, want %q", info.Name, "myproject")
+	}
+}
+
+func TestDetect_PopulatesCodeStyle(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "go.mod", "module github.com/test/myproject\n\ngo 1.21\n")
+	writeFile(t, dir, "main.go", "package main\n")
+
+	scan, _ := Scan(dir)
+	info, err := Detect(dir, scan)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Go project should get gofmt as default formatter
+	if info.CodeStyle.Formatter != "gofmt" {
+		t.Errorf("CodeStyle.Formatter = %q, want %q", info.CodeStyle.Formatter, "gofmt")
+	}
+}
+
 // --- helpers ---
 
 func contains(slice []string, item string) bool {

@@ -51,6 +51,17 @@ func Detect(root string, scan *ScanResult) (*ProjectInfo, error) {
 	detectCI(scan, info)
 	detectDocker(scan, info)
 
+	// Detect project metadata from config files
+	info.Name = detectProjectName(root, scan)
+	info.Description = detectDescription(root, scan)
+
+	primaryLang := ""
+	if len(info.Languages) > 0 {
+		primaryLang = info.Languages[0].Name
+	}
+	info.CodeStyle = detectCodeStyle(root, scan, primaryLang)
+	info.Scripts = detectScripts(root, scan)
+
 	info.Conventions = DetectConventions(root, scan)
 
 	return info, nil
