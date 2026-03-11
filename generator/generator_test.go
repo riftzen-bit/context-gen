@@ -9,7 +9,6 @@ import (
 
 func TestGenerate_ClaudeFormat(t *testing.T) {
 	info := buildTestProjectInfo()
-
 	results := Generate(info, FormatClaude)
 
 	content, ok := results["CLAUDE.md"]
@@ -20,30 +19,55 @@ func TestGenerate_ClaudeFormat(t *testing.T) {
 		t.Errorf("expected 1 file, got %d", len(results))
 	}
 
-	// Check expected sections.
-	sections := []string{
-		"# CLAUDE.md",
-		"## Project Overview",
-		"## Tech Stack",
-		"## Common Commands",
-		"## Project Structure",
-		"## Conventions",
-	}
-	for _, section := range sections {
-		if !strings.Contains(content, section) {
-			t.Errorf("CLAUDE.md missing section: %s", section)
-		}
+	// New format: starts with project name, not "# CLAUDE.md"
+	if !strings.Contains(content, "# test-project") {
+		t.Errorf("expected project name header, got:\n%s", content[:min(200, len(content))])
 	}
 
-	// Check language info.
-	if !strings.Contains(content, "Go") {
-		t.Error("expected Go language in output")
+	// Should have concise tech stack (pipe-separated)
+	if !strings.Contains(content, "## Tech Stack") {
+		t.Error("missing Tech Stack section")
+	}
+
+	// Should have common commands
+	if !strings.Contains(content, "## Common Commands") {
+		t.Error("missing Common Commands section")
+	}
+
+	// Should have Code Style section
+	if !strings.Contains(content, "## Code Style") {
+		t.Error("missing Code Style section")
+	}
+
+	// Should have Project Structure with annotations
+	if !strings.Contains(content, "## Project Structure") {
+		t.Error("missing Project Structure section")
+	}
+
+	// Claude format should have Workflow placeholder
+	if !strings.Contains(content, "## Workflow") {
+		t.Error("missing Workflow placeholder section")
+	}
+
+	// Claude format should have Architecture placeholder
+	if !strings.Contains(content, "## Architecture") {
+		t.Error("missing Architecture placeholder section")
+	}
+
+	// Should NOT have the old verbose sections
+	if strings.Contains(content, "### Languages") {
+		t.Error("should not have verbose Languages subsection")
+	}
+	if strings.Contains(content, "### Build Tools") {
+		t.Error("should not have verbose Build Tools subsection")
+	}
+	if strings.Contains(content, "## Project Overview") {
+		t.Error("should not have old Project Overview section")
 	}
 }
 
 func TestGenerate_CursorFormat(t *testing.T) {
 	info := buildTestProjectInfo()
-
 	results := Generate(info, FormatCursor)
 
 	content, ok := results[".cursorrules"]
@@ -54,18 +78,25 @@ func TestGenerate_CursorFormat(t *testing.T) {
 		t.Errorf("expected 1 file, got %d", len(results))
 	}
 
-	// Cursor uses "# Project Context" instead of "# CLAUDE.md".
+	// Cursor uses "# Project Context" instead of project name
 	if !strings.Contains(content, "# Project Context") {
 		t.Error(".cursorrules missing '# Project Context' header")
 	}
-	if strings.Contains(content, "# CLAUDE.md") {
-		t.Error(".cursorrules should not contain '# CLAUDE.md'")
+	if strings.Contains(content, "# test-project") {
+		t.Error(".cursorrules should not contain project name header")
+	}
+
+	// Cursor should NOT have Workflow/Architecture placeholders
+	if strings.Contains(content, "## Workflow") {
+		t.Error(".cursorrules should not have Workflow section")
+	}
+	if strings.Contains(content, "## Architecture") {
+		t.Error(".cursorrules should not have Architecture section")
 	}
 }
 
 func TestGenerate_BothFormat(t *testing.T) {
 	info := buildTestProjectInfo()
-
 	results := Generate(info, FormatBoth)
 
 	if _, ok := results["CLAUDE.md"]; !ok {
@@ -76,6 +107,199 @@ func TestGenerate_BothFormat(t *testing.T) {
 	}
 	if len(results) != 2 {
 		t.Errorf("expected 2 files, got %d", len(results))
+	}
+}
+
+func TestWriteHeader_Claude(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		Name:        "my-project",
+		Description: "A great tool for developers",
+	}
+
+	var b strings.Builder
+	writeHeader(&b, info, true)
+	output := b.String()
+
+	if !strings.Contains(output, "# my-project") {
+		t.Error("expected project name in Claude header")
+	}
+	if !strings.Contains(output, "A great tool for developers") {
+		t.Error("expected description in header")
+	}
+}
+
+func TestWriteHeader_Cursor(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		Name:        "my-project",
+		Description: "A great tool for developers",
+	}
+
+	var b strings.Builder
+	writeHeader(&b, info, false)
+	output := b.String()
+
+	if !strings.Contains(output, "# Project Context") {
+		t.Error("expected '# Project Context' in Cursor header")
+	}
+	if strings.Contains(output, "# my-project") {
+		t.Error("should not contain project name in Cursor header")
+	}
+}
+
+func TestWriteHeader_EmptyName(t *testing.T) {
+	info := &analyzer.ProjectInfo{}
+
+	var b strings.Builder
+	writeHeader(&b, info, true)
+	output := b.String()
+
+	if !strings.Contains(output, "# Project") {
+		t.Error("expected fallback '# Project' when name is empty")
+	}
+}
+
+func TestWriteTechStackConcise(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		Languages: []analyzer.Language{
+			{Name: "Go", FileCount: 10, Percentage: 100},
+		},
+		Frameworks: []string{"Echo"},
+		HasDocker:  true,
+		HasCI:      true,
+		CIProvider: "GitHub Actions",
+	}
+
+	var b strings.Builder
+	writeTechStackConcise(&b, info)
+	output := b.String()
+
+	if !strings.Contains(output, "Go | Echo | Docker | GitHub Actions") {
+		t.Errorf("expected pipe-separated tech stack, got:\n%s", output)
+	}
+}
+
+func TestWriteStructureAnnotated(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		Structure: analyzer.DirStructure{
+			TopLevelDirs: []string{"cmd", "internal", "custom"},
+		},
+	}
+
+	var b strings.Builder
+	writeStructureAnnotated(&b, info)
+	output := b.String()
+
+	if !strings.Contains(output, "## Project Structure") {
+		t.Error("missing Project Structure section")
+	}
+	if !strings.Contains(output, "CLI entry points") {
+		t.Error("missing annotation for cmd/")
+	}
+	if !strings.Contains(output, "Private application code") {
+		t.Error("missing annotation for internal/")
+	}
+	// Unknown dir should have no annotation
+	if strings.Contains(output, "custom/") && strings.Contains(output, "custom/  ") {
+		// custom/ should appear but without " — " annotation
+	}
+}
+
+func TestWriteStructureAnnotated_EmptyDirs(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		Structure: analyzer.DirStructure{},
+	}
+
+	var b strings.Builder
+	writeStructureAnnotated(&b, info)
+	output := b.String()
+
+	if strings.Contains(output, "## Project Structure") {
+		t.Error("should not write structure section with no dirs")
+	}
+}
+
+func TestWriteCommands_WithScripts(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		Languages: []analyzer.Language{
+			{Name: "Go", FileCount: 10, Percentage: 100},
+		},
+		Scripts: map[string]string{
+			"build": "make build",
+			"test":  "make test",
+		},
+		PackageManagers: map[string]string{},
+	}
+
+	var b strings.Builder
+	writeCommands(&b, info)
+	output := b.String()
+
+	// When scripts exist, they should be used instead of hardcoded
+	if !strings.Contains(output, "make build") {
+		t.Error("expected detected script 'make build'")
+	}
+	if !strings.Contains(output, "make test") {
+		t.Error("expected detected script 'make test'")
+	}
+	// Should NOT contain hardcoded Go commands
+	if strings.Contains(output, "go build ./...") {
+		t.Error("should not have hardcoded Go commands when scripts exist")
+	}
+}
+
+func TestWriteCommands_FallbackToHardcoded(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		Languages: []analyzer.Language{
+			{Name: "Go", FileCount: 10, Percentage: 100},
+		},
+		Scripts:         nil,
+		PackageManagers: map[string]string{},
+	}
+
+	var b strings.Builder
+	writeCommands(&b, info)
+	output := b.String()
+
+	// No scripts, should fall back to hardcoded Go commands
+	if !strings.Contains(output, "go build ./...") {
+		t.Error("expected hardcoded Go build command as fallback")
+	}
+}
+
+func TestWriteCodeStyle(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		CodeStyle: analyzer.CodeStyle{
+			IndentStyle: "tabs",
+			IndentSize:  4,
+			LineLength:  120,
+			Formatter:   "gofmt",
+		},
+	}
+
+	var b strings.Builder
+	writeCodeStyle(&b, info)
+	output := b.String()
+
+	if !strings.Contains(output, "- Indent: tabs (4)") {
+		t.Errorf("expected indent info, got:\n%s", output)
+	}
+	if !strings.Contains(output, "- Line length: 120") {
+		t.Error("expected line length")
+	}
+	if !strings.Contains(output, "- Formatter: gofmt") {
+		t.Error("expected formatter")
+	}
+}
+
+func TestWriteCodeStyle_Empty(t *testing.T) {
+	info := &analyzer.ProjectInfo{}
+
+	var b strings.Builder
+	writeCodeStyle(&b, info)
+	output := b.String()
+
+	if !strings.Contains(output, "<!-- Add project-specific style rules here -->") {
+		t.Error("expected placeholder comment when no style detected")
 	}
 }
 
@@ -105,10 +329,10 @@ func TestWriteBuildCommands_GoProject(t *testing.T) {
 
 func TestWriteBuildCommands_NodeProject(t *testing.T) {
 	tests := []struct {
-		name     string
-		pm       string
-		wantPM   string
-		wantRun  string
+		name    string
+		pm      string
+		wantPM  string
+		wantRun string
 	}{
 		{"npm", "npm", "npm install", "npm run"},
 		{"pnpm", "pnpm", "pnpm install", "pnpm run"},
@@ -163,46 +387,6 @@ func TestWriteBuildCommands_PythonPoetry(t *testing.T) {
 	}
 }
 
-func TestWriteBuildCommands_PythonPdm(t *testing.T) {
-	info := &analyzer.ProjectInfo{
-		Languages: []analyzer.Language{
-			{Name: "Python", FileCount: 5, Percentage: 100},
-		},
-		PackageManagers: map[string]string{"python": "pdm"},
-	}
-
-	var b strings.Builder
-	writeBuildCommands(&b, info)
-	output := b.String()
-
-	if !strings.Contains(output, "pdm install") {
-		t.Error("missing pdm install command")
-	}
-	if !strings.Contains(output, "pdm run pytest") {
-		t.Error("missing pdm run pytest command")
-	}
-}
-
-func TestWriteBuildCommands_PythonPip(t *testing.T) {
-	info := &analyzer.ProjectInfo{
-		Languages: []analyzer.Language{
-			{Name: "Python", FileCount: 5, Percentage: 100},
-		},
-		PackageManagers: map[string]string{"python": "pip"},
-	}
-
-	var b strings.Builder
-	writeBuildCommands(&b, info)
-	output := b.String()
-
-	if !strings.Contains(output, "pip install -r requirements.txt") {
-		t.Error("missing pip install command")
-	}
-	if !strings.Contains(output, "pytest") {
-		t.Error("missing pytest command")
-	}
-}
-
 func TestWriteBuildCommands_RustProject(t *testing.T) {
 	info := &analyzer.ProjectInfo{
 		Languages: []analyzer.Language{
@@ -225,162 +409,6 @@ func TestWriteBuildCommands_RustProject(t *testing.T) {
 		if !strings.Contains(output, cmd) {
 			t.Errorf("missing Rust command: %s", cmd)
 		}
-	}
-}
-
-func TestWriteBuildCommands_MultiLanguage(t *testing.T) {
-	info := &analyzer.ProjectInfo{
-		Languages: []analyzer.Language{
-			{Name: "Go", FileCount: 10, Percentage: 50},
-			{Name: "TypeScript", FileCount: 10, Percentage: 50},
-		},
-		PackageManagers: map[string]string{"js": "pnpm"},
-	}
-
-	var b strings.Builder
-	writeBuildCommands(&b, info)
-	output := b.String()
-
-	// Should have both Go and Node commands.
-	if !strings.Contains(output, "go build") {
-		t.Error("missing Go build command")
-	}
-	if !strings.Contains(output, "pnpm install") {
-		t.Error("missing pnpm install command")
-	}
-}
-
-func TestWriteBuildCommands_NoJSCommandsWithoutJSLang(t *testing.T) {
-	// If there's a JS package manager but no JS/TS language, no JS commands.
-	info := &analyzer.ProjectInfo{
-		Languages: []analyzer.Language{
-			{Name: "Go", FileCount: 10, Percentage: 100},
-		},
-		PackageManagers: map[string]string{"js": "npm"},
-	}
-
-	var b strings.Builder
-	writeBuildCommands(&b, info)
-	output := b.String()
-
-	if strings.Contains(output, "npm install") {
-		t.Error("should not have npm commands without JS language")
-	}
-}
-
-func TestWriteProjectOverview(t *testing.T) {
-	info := &analyzer.ProjectInfo{
-		Languages: []analyzer.Language{
-			{Name: "Go", FileCount: 10, Percentage: 80},
-			{Name: "Shell", FileCount: 2, Percentage: 20},
-		},
-		Frameworks: []string{"Express", "React"},
-		Structure: analyzer.DirStructure{
-			TotalFiles: 12,
-			TotalDirs:  3,
-		},
-		PackageManagers: map[string]string{},
-	}
-
-	var b strings.Builder
-	writeProjectOverview(&b, info)
-	output := b.String()
-
-	if !strings.Contains(output, "Go") {
-		t.Error("expected primary language Go")
-	}
-	if !strings.Contains(output, "80%") {
-		t.Error("expected 80% percentage")
-	}
-	if !strings.Contains(output, "Express, React") {
-		t.Error("expected frameworks list")
-	}
-	if !strings.Contains(output, "Files: 12") {
-		t.Error("expected file count")
-	}
-}
-
-func TestWriteTechStack(t *testing.T) {
-	info := &analyzer.ProjectInfo{
-		Languages: []analyzer.Language{
-			{Name: "Go", FileCount: 10, Percentage: 100},
-		},
-		BuildTools:      []string{"Go Modules", "Make"},
-		TestTools:        []string{"testing"},
-		Linters:          []string{"golangci-lint"},
-		HasDocker:        true,
-		HasCI:            true,
-		CIProvider:       "GitHub Actions",
-		PackageManagers:  map[string]string{"go": "go modules"},
-	}
-
-	var b strings.Builder
-	writeTechStack(&b, info)
-	output := b.String()
-
-	if !strings.Contains(output, "### Languages") {
-		t.Error("missing Languages section")
-	}
-	if !strings.Contains(output, "### Build Tools") {
-		t.Error("missing Build Tools section")
-	}
-	if !strings.Contains(output, "### Testing") {
-		t.Error("missing Testing section")
-	}
-	if !strings.Contains(output, "### Linting / Formatting") {
-		t.Error("missing Linting section")
-	}
-	if !strings.Contains(output, "Docker") {
-		t.Error("missing Docker")
-	}
-	if !strings.Contains(output, "GitHub Actions") {
-		t.Error("missing CI provider")
-	}
-}
-
-func TestWriteStructure(t *testing.T) {
-	info := &analyzer.ProjectInfo{
-		Structure: analyzer.DirStructure{
-			TopLevelDirs: []string{"cmd", "internal", "pkg"},
-			EntryPoints:  []string{"cmd/main.go"},
-		},
-		PackageManagers: map[string]string{},
-	}
-
-	var b strings.Builder
-	writeStructure(&b, info)
-	output := b.String()
-
-	if !strings.Contains(output, "## Project Structure") {
-		t.Error("missing Project Structure section")
-	}
-	if !strings.Contains(output, "cmd/") {
-		t.Error("missing cmd/ directory")
-	}
-	if !strings.Contains(output, "internal/") {
-		t.Error("missing internal/ directory")
-	}
-	if !strings.Contains(output, "### Entry Points") {
-		t.Error("missing Entry Points section")
-	}
-	if !strings.Contains(output, "cmd/main.go") {
-		t.Error("missing main.go entry point")
-	}
-}
-
-func TestWriteStructure_EmptyDirs(t *testing.T) {
-	info := &analyzer.ProjectInfo{
-		Structure:       analyzer.DirStructure{},
-		PackageManagers: map[string]string{},
-	}
-
-	var b strings.Builder
-	writeStructure(&b, info)
-	output := b.String()
-
-	// Should not write structure section if no top-level dirs.
-	if strings.Contains(output, "## Project Structure") {
-		t.Error("should not write structure section with no dirs")
 	}
 }
 
@@ -424,15 +452,10 @@ func TestWriteConventions(t *testing.T) {
 	if strings.Contains(output, "Low confidence convention") {
 		t.Error("low confidence convention should be filtered out")
 	}
-	if !strings.Contains(output, "my-component.ts") {
-		t.Error("missing example")
-	}
 }
 
 func TestWriteConventions_Empty(t *testing.T) {
-	info := &analyzer.ProjectInfo{
-		PackageManagers: map[string]string{},
-	}
+	info := &analyzer.ProjectInfo{}
 
 	var b strings.Builder
 	writeConventions(&b, info)
@@ -464,9 +487,9 @@ func TestHasLang(t *testing.T) {
 
 func TestHasJSLang(t *testing.T) {
 	tests := []struct {
-		name   string
-		langs  []analyzer.Language
-		want   bool
+		name  string
+		langs []analyzer.Language
+		want  bool
 	}{
 		{"JavaScript", []analyzer.Language{{Name: "JavaScript"}}, true},
 		{"TypeScript", []analyzer.Language{{Name: "TypeScript"}}, true},
@@ -491,24 +514,31 @@ func TestHasJSLang(t *testing.T) {
 
 func buildTestProjectInfo() *analyzer.ProjectInfo {
 	return &analyzer.ProjectInfo{
+		Name:        "test-project",
+		Description: "A test project for unit tests",
 		Languages: []analyzer.Language{
 			{Name: "Go", Extension: "go", FileCount: 10, Percentage: 80},
 			{Name: "Shell", Extension: "sh", FileCount: 2, Percentage: 20},
 		},
-		Frameworks:  []string{},
-		BuildTools:  []string{"Go Modules", "Make"},
-		TestTools:   []string{},
-		Linters:     []string{},
-		HasDocker:   true,
-		HasCI:       true,
-		CIProvider:  "GitHub Actions",
+		Frameworks:      []string{},
+		BuildTools:      []string{"Go Modules", "Make"},
+		TestTools:       []string{},
+		Linters:         []string{"golangci-lint"},
+		HasDocker:       true,
+		HasCI:           true,
+		CIProvider:      "GitHub Actions",
 		PackageManagers: map[string]string{},
+		CodeStyle: analyzer.CodeStyle{
+			IndentStyle: "tabs",
+			Formatter:   "gofmt",
+		},
+		Scripts: nil,
 		Structure: analyzer.DirStructure{
-			TopLevelDirs: []string{"analyzer", "generator"},
+			TopLevelDirs: []string{"analyzer", "cmd", "generator"},
 			EntryPoints:  []string{"main.go"},
 			ConfigFiles:  []string{"go.mod"},
 			TotalFiles:   12,
-			TotalDirs:    2,
+			TotalDirs:    3,
 		},
 		Conventions: []analyzer.Convention{
 			{

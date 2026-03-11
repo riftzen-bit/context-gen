@@ -2,6 +2,7 @@ package generator
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/paul/context-gen/analyzer"
@@ -15,6 +16,20 @@ const (
 	FormatCursor Format = "cursor"
 	FormatBoth   Format = "both"
 )
+
+// Directory annotations for Project Structure section.
+var dirAnnotations = map[string]string{
+	"cmd":      "CLI entry points",
+	"pkg":      "Public library code",
+	"internal": "Private application code",
+	"api":      "API definitions",
+	"web":      "Web assets",
+	"src":      "Source code",
+	"lib":      "Library code",
+	"test":     "Tests",
+	"tests":    "Tests",
+	"docs":     "Documentation",
+}
 
 // Generate creates context file content for the specified format.
 func Generate(info *analyzer.ProjectInfo, format Format) map[string]string {
@@ -36,14 +51,14 @@ func Generate(info *analyzer.ProjectInfo, format Format) map[string]string {
 func generateClaude(info *analyzer.ProjectInfo) string {
 	var b strings.Builder
 
-	b.WriteString("# CLAUDE.md\n\n")
-	b.WriteString("This file provides guidance to Claude Code when working with this codebase.\n\n")
-
-	writeProjectOverview(&b, info)
-	writeTechStack(&b, info)
-	writeBuildCommands(&b, info)
-	writeStructure(&b, info)
+	writeHeader(&b, info, true)
+	writeTechStackConcise(&b, info)
+	writeCommands(&b, info)
+	writeCodeStyle(&b, info)
+	writeStructureAnnotated(&b, info)
 	writeConventions(&b, info)
+	writePlaceholder(&b, "Workflow", "Add git workflow, branch naming, PR conventions here")
+	writePlaceholder(&b, "Architecture", "Add key design decisions here")
 
 	return b.String()
 }
@@ -51,79 +66,132 @@ func generateClaude(info *analyzer.ProjectInfo) string {
 func generateCursor(info *analyzer.ProjectInfo) string {
 	var b strings.Builder
 
-	b.WriteString("# Project Context\n\n")
-
-	writeProjectOverview(&b, info)
-	writeTechStack(&b, info)
-	writeBuildCommands(&b, info)
-	writeStructure(&b, info)
+	writeHeader(&b, info, false)
+	writeTechStackConcise(&b, info)
+	writeCommands(&b, info)
+	writeCodeStyle(&b, info)
+	writeStructureAnnotated(&b, info)
 	writeConventions(&b, info)
+	// Cursor: no Workflow/Architecture placeholders
 
 	return b.String()
 }
 
-func writeProjectOverview(b *strings.Builder, info *analyzer.ProjectInfo) {
-	b.WriteString("## Project Overview\n\n")
+func writeHeader(b *strings.Builder, info *analyzer.ProjectInfo, isClaude bool) {
+	if isClaude {
+		name := info.Name
+		if name == "" {
+			name = "Project"
+		}
+		b.WriteString(fmt.Sprintf("# %s\n\n", name))
+	} else {
+		b.WriteString("# Project Context\n\n")
+	}
 
+	if info.Description != "" {
+		b.WriteString(info.Description + "\n\n")
+	}
+}
+
+func writeTechStackConcise(b *strings.Builder, info *analyzer.ProjectInfo) {
+	b.WriteString("## Tech Stack\n\n")
+
+	var parts []string
 	if len(info.Languages) > 0 {
-		primary := info.Languages[0]
-		b.WriteString(fmt.Sprintf("Primary language: **%s** (%.0f%% of codebase)\n", primary.Name, primary.Percentage))
+		parts = append(parts, info.Languages[0].Name)
+	}
+	for _, fw := range info.Frameworks {
+		parts = append(parts, fw)
+	}
+	if info.HasDocker {
+		parts = append(parts, "Docker")
+	}
+	if info.HasCI {
+		parts = append(parts, info.CIProvider)
 	}
 
-	if len(info.Frameworks) > 0 {
-		b.WriteString(fmt.Sprintf("Frameworks: %s\n", strings.Join(info.Frameworks, ", ")))
+	if len(parts) > 0 {
+		b.WriteString(strings.Join(parts, " | "))
+		b.WriteString("\n\n")
+	}
+}
+
+func writeCommands(b *strings.Builder, info *analyzer.ProjectInfo) {
+	b.WriteString("## Common Commands\n\n")
+
+	// If detected scripts exist, use them (priority over hardcoded)
+	if len(info.Scripts) > 0 {
+		b.WriteString("```bash\n")
+		keys := make([]string, 0, len(info.Scripts))
+		for k := range info.Scripts {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, name := range keys {
+			b.WriteString(fmt.Sprintf("%-25s # %s\n", info.Scripts[name], name))
+		}
+		b.WriteString("```\n\n")
+		return
 	}
 
-	b.WriteString(fmt.Sprintf("Files: %d | Directories: %d\n", info.Structure.TotalFiles, info.Structure.TotalDirs))
+	// Fallback: hardcoded language-specific commands
+	writeBuildCommands(b, info)
+}
+
+func writeCodeStyle(b *strings.Builder, info *analyzer.ProjectInfo) {
+	b.WriteString("## Code Style\n\n")
+
+	hasContent := false
+	if info.CodeStyle.IndentStyle != "" {
+		b.WriteString(fmt.Sprintf("- Indent: %s", info.CodeStyle.IndentStyle))
+		if info.CodeStyle.IndentSize > 0 {
+			b.WriteString(fmt.Sprintf(" (%d)", info.CodeStyle.IndentSize))
+		}
+		b.WriteString("\n")
+		hasContent = true
+	}
+	if info.CodeStyle.LineLength > 0 {
+		b.WriteString(fmt.Sprintf("- Line length: %d\n", info.CodeStyle.LineLength))
+		hasContent = true
+	}
+	if info.CodeStyle.Formatter != "" {
+		b.WriteString(fmt.Sprintf("- Formatter: %s\n", info.CodeStyle.Formatter))
+		hasContent = true
+	}
+	for _, rule := range info.CodeStyle.ExtraRules {
+		b.WriteString(fmt.Sprintf("- %s\n", rule))
+		hasContent = true
+	}
+
+	if !hasContent {
+		b.WriteString("<!-- Add project-specific style rules here -->\n")
+	}
 	b.WriteString("\n")
 }
 
-func writeTechStack(b *strings.Builder, info *analyzer.ProjectInfo) {
-	b.WriteString("## Tech Stack\n\n")
+func writeStructureAnnotated(b *strings.Builder, info *analyzer.ProjectInfo) {
+	if len(info.Structure.TopLevelDirs) == 0 {
+		return
+	}
 
-	if len(info.Languages) > 0 {
-		b.WriteString("### Languages\n")
-		for _, lang := range info.Languages {
-			b.WriteString(fmt.Sprintf("- %s (%d files, %.0f%%)\n", lang.Name, lang.FileCount, lang.Percentage))
+	b.WriteString("## Project Structure\n\n")
+	b.WriteString("```\n")
+	for _, d := range info.Structure.TopLevelDirs {
+		if ann, ok := dirAnnotations[d]; ok {
+			b.WriteString(fmt.Sprintf("%-12s — %s\n", d+"/", ann))
+		} else {
+			b.WriteString(d + "/\n")
 		}
-		b.WriteString("\n")
 	}
+	b.WriteString("```\n\n")
+}
 
-	if len(info.BuildTools) > 0 {
-		b.WriteString(fmt.Sprintf("### Build Tools\n- %s\n\n", strings.Join(info.BuildTools, "\n- ")))
-	}
-
-	if len(info.PackageManagers) > 0 {
-		b.WriteString("### Package Managers\n")
-		for eco, pm := range info.PackageManagers {
-			b.WriteString(fmt.Sprintf("- %s: %s\n", eco, pm))
-		}
-		b.WriteString("\n")
-	}
-
-	if len(info.TestTools) > 0 {
-		b.WriteString(fmt.Sprintf("### Testing\n- %s\n\n", strings.Join(info.TestTools, "\n- ")))
-	}
-
-	if len(info.Linters) > 0 {
-		b.WriteString(fmt.Sprintf("### Linting / Formatting\n- %s\n\n", strings.Join(info.Linters, "\n- ")))
-	}
-
-	if info.HasDocker {
-		b.WriteString("### Infrastructure\n- Docker\n")
-	}
-	if info.HasCI {
-		b.WriteString(fmt.Sprintf("- CI/CD: %s\n", info.CIProvider))
-	}
-	if info.HasDocker || info.HasCI {
-		b.WriteString("\n")
-	}
+func writePlaceholder(b *strings.Builder, section, hint string) {
+	b.WriteString(fmt.Sprintf("## %s\n\n", section))
+	b.WriteString(fmt.Sprintf("<!-- %s -->\n\n", hint))
 }
 
 func writeBuildCommands(b *strings.Builder, info *analyzer.ProjectInfo) {
-	b.WriteString("## Common Commands\n\n")
-
-	// Generate commands based on detected stack
 	if hasLang(info, "Go") {
 		b.WriteString("```bash\n")
 		b.WriteString("go build ./...        # Build\n")
@@ -172,27 +240,6 @@ func writeBuildCommands(b *strings.Builder, info *analyzer.ProjectInfo) {
 		b.WriteString("cargo clippy         # Lint\n")
 		b.WriteString("cargo fmt            # Format\n")
 		b.WriteString("```\n\n")
-	}
-}
-
-func writeStructure(b *strings.Builder, info *analyzer.ProjectInfo) {
-	if len(info.Structure.TopLevelDirs) == 0 {
-		return
-	}
-
-	b.WriteString("## Project Structure\n\n")
-	b.WriteString("```\n")
-	for _, d := range info.Structure.TopLevelDirs {
-		b.WriteString(fmt.Sprintf("%s/\n", d))
-	}
-	b.WriteString("```\n\n")
-
-	if len(info.Structure.EntryPoints) > 0 {
-		b.WriteString("### Entry Points\n")
-		for _, e := range info.Structure.EntryPoints {
-			b.WriteString(fmt.Sprintf("- `%s`\n", e))
-		}
-		b.WriteString("\n")
 	}
 }
 
