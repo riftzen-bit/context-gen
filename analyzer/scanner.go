@@ -83,6 +83,11 @@ var configFiles = map[string]bool{
 	"mix.exs":           true,
 	"pubspec.yaml":      true,
 	"CMakeLists.txt":    true,
+	".editorconfig":     true,
+	"README.md":         true,
+	"readme.md":         true,
+	"README":            true,
+	"rustfmt.toml":      true,
 }
 
 // Scan walks the project directory and collects file metadata.

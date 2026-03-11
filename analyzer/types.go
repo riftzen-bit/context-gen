@@ -14,6 +14,10 @@ type ProjectInfo struct {
 	CIProvider   string
 	Structure    DirStructure
 	Conventions  []Convention
+	Name         string
+	Description  string
+	CodeStyle    CodeStyle
+	Scripts      map[string]string
 }
 
 // Language represents a detected programming language with file count.
@@ -31,6 +35,15 @@ type DirStructure struct {
 	ConfigFiles  []string
 	TotalFiles   int
 	TotalDirs    int
+}
+
+// CodeStyle holds detected code formatting rules.
+type CodeStyle struct {
+	IndentStyle string   // "tabs" or "spaces"
+	IndentSize  int      // 2, 4, etc.
+	LineLength  int      // 80, 100, 120, etc.
+	Formatter   string   // "gofmt", "prettier", "black", "rustfmt", etc.
+	ExtraRules  []string
 }
 
 // Convention represents a detected coding convention.
