@@ -35,6 +35,7 @@ $ context-gen init -f all
   CREATE .cursor/rules/project.mdc
   CREATE .clinerules
   CREATE .windsurfrules
+  CREATE .gemini/GEMINI.md
 
  Done! Review the generated files and customize them for your project.
 ```
@@ -48,7 +49,7 @@ AI coding assistants work better when they understand your project. But writing 
 - **Accurate detection** — reads your actual configs, not guesses
 - **Framework-aware rules** — generates coding guidelines specific to your stack (React hooks, Go error handling, Rust Result types...)
 - **Smart updates** — re-scan without losing your customizations
-- **6 formats** — covers every major AI coding assistant
+- **7 formats** — covers every major AI coding assistant
 
 ## Supported Formats
 
@@ -60,8 +61,9 @@ AI coding assistants work better when they understand your project. But writing 
 | Copilot | `AGENTS.md` | [GitHub Copilot](https://github.com/features/copilot) |
 | Cline | `.clinerules` | [Cline](https://github.com/cline/cline) / Roo Code |
 | Windsurf | `.windsurfrules` | [Windsurf](https://windsurf.com) |
+| Antigravity | `.gemini/GEMINI.md` | [Google Antigravity](https://antigravity.google) |
 
-Generate one format, a pair (`both` = Claude + Cursor), or all six at once.
+Generate one format, a pair (`both` = Claude + Cursor), or all seven at once.
 
 ## Installation
 
@@ -129,7 +131,7 @@ context-gen preview
 | `--dry-run` | | Preview without writing (init) | |
 | `--force` | | Skip smart merge, overwrite all (update) | |
 
-**Format options:** `claude`, `cursor`, `agents`, `cursor-mdc`, `cline`, `windsurf`, `both`, `all`
+**Format options:** `claude`, `cursor`, `agents`, `cursor-mdc`, `cline`, `windsurf`, `antigravity`, `both`, `all`
 
 ## What Gets Detected
 
@@ -226,16 +228,16 @@ pnpm run test -- path/to/file.test.ts  # Run single file
 ## How It Works
 
 ```
-┌─────────┐     ┌──────────┐     ┌──────────┐
-│  Scan   │────▶│  Detect  │────▶│ Generate │
-│         │     │          │     │          │
-│ Walk    │     │ Languages│     │ CLAUDE.md│
-│ dirs    │     │ Frameworks│    │ .cursor  │
-│ Collect │     │ Build    │     │ AGENTS.md│
-│ metadata│     │ Style    │     │ .cline   │
-│ .git-   │     │ CI/CD    │     │ .wind-   │
-│  ignore │     │ Scripts  │     │  surf    │
-└─────────┘     └──────────┘     └──────────┘
+┌─────────┐     ┌──────────┐     ┌───────────┐
+│  Scan   │────▶│  Detect  │────▶│  Generate │
+│         │     │          │     │           │
+│ Walk    │     │ Languages│     │ CLAUDE.md │
+│ dirs    │     │ Frameworks│    │ .cursor   │
+│ Collect │     │ Build    │     │ AGENTS.md │
+│ metadata│     │ Style    │     │ .cline    │
+│ .git-   │     │ CI/CD    │     │ .windsurf │
+│  ignore │     │ Scripts  │     │ .gemini   │
+└─────────┘     └──────────┘     └───────────┘
 ```
 
 1. **Scan** — walks your project directory, respects `.gitignore`, collects file metadata
@@ -261,9 +263,14 @@ Just run `context-gen` with no arguments for a menu-driven experience:
   Quit
 
   Choose format:
-> Both (CLAUDE.md + .cursorrules)
-  Claude (CLAUDE.md)
+> Claude (CLAUDE.md)
   Cursor (.cursorrules)
+  GitHub Copilot (AGENTS.md)
+  Cursor MDC (.cursor/rules/)
+  Cline (.clinerules)
+  Windsurf (.windsurfrules)
+  Antigravity (.gemini/GEMINI.md)
+  Both (Claude + Cursor)
   All formats
 ```
 
