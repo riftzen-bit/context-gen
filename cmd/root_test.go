@@ -68,3 +68,18 @@ func TestDetectExistingFormats_ClineAndWindsurf_NotAll(t *testing.T) {
 		}
 	}
 }
+
+func TestDetectExistingFormats_Antigravity(t *testing.T) {
+	dir := t.TempDir()
+	geminiDir := filepath.Join(dir, ".gemini")
+	os.MkdirAll(geminiDir, 0755)
+	os.WriteFile(filepath.Join(geminiDir, "GEMINI.md"), []byte("# test"), 0644)
+
+	formats := detectExistingFormats(dir)
+	if len(formats) != 1 {
+		t.Fatalf("expected 1 format, got %d: %v", len(formats), formats)
+	}
+	if formats[0] != generator.FormatAntigravity {
+		t.Errorf("expected FormatAntigravity, got %s", formats[0])
+	}
+}

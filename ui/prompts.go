@@ -20,6 +20,7 @@ var formatOptions = []string{
 	"Cursor MDC (.cursor/rules/)",
 	"Cline (.clinerules)",
 	"Windsurf (.windsurfrules)",
+	"Antigravity (.gemini/GEMINI.md)",
 	"Both (Claude + Cursor)",
 	"All formats",
 }
@@ -45,8 +46,10 @@ func (m FormatSelectModel) SelectedFormat() string {
 	case 5:
 		return "windsurf"
 	case 6:
-		return "both"
+		return "antigravity"
 	case 7:
+		return "both"
+	case 8:
 		return "all"
 	default:
 		return "both"

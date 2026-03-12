@@ -19,8 +19,9 @@ const (
 	FormatAgents    Format = "agents"
 	FormatCursorMDC Format = "cursor-mdc"
 	FormatCline     Format = "cline"
-	FormatWindsurf  Format = "windsurf"
-	FormatAll       Format = "all"
+	FormatWindsurf      Format = "windsurf"
+	FormatAntigravity   Format = "antigravity"
+	FormatAll           Format = "all"
 )
 
 // Directory annotations for Project Structure section.
@@ -57,6 +58,8 @@ func Generate(info *analyzer.ProjectInfo, format Format) map[string]string {
 		results[".clinerules"] = generateCline(info)
 	case FormatWindsurf:
 		results[".windsurfrules"] = generateWindsurf(info)
+	case FormatAntigravity:
+		results[".gemini/GEMINI.md"] = generateAntigravity(info)
 	case FormatAll:
 		results["CLAUDE.md"] = generateClaude(info)
 		results[".cursorrules"] = generateCursor(info)
@@ -64,6 +67,7 @@ func Generate(info *analyzer.ProjectInfo, format Format) map[string]string {
 		results[".cursor/rules/project.mdc"] = generateCursorMDC(info)
 		results[".clinerules"] = generateCline(info)
 		results[".windsurfrules"] = generateWindsurf(info)
+		results[".gemini/GEMINI.md"] = generateAntigravity(info)
 	}
 
 	return results
@@ -73,19 +77,25 @@ func generateClaude(info *analyzer.ProjectInfo) string {
 	var b strings.Builder
 
 	writeHeader(&b, info, true)
-	writeTechStackConcise(&b, info)
-	writeCommands(&b, info)
-	writeCodeStyle(&b, info)
-	writeStructureAnnotated(&b, info)
-	writeKeyFiles(&b, info)
-	writeConventions(&b, info)
-	writeRules(&b, info)
-	writeTesting(&b, info)
-	writePlaceholder(&b, "Workflow", "Add git workflow, branch naming, PR conventions here")
-	writePlaceholder(&b, "Architecture", "Add key design decisions here")
-	writeFooter(&b)
+	writeAgentBody(&b, info)
 
 	return b.String()
+}
+
+// writeAgentBody writes the shared body used by agent-first formats (Claude, Antigravity).
+// Includes all standard sections plus Workflow/Architecture placeholders.
+func writeAgentBody(b *strings.Builder, info *analyzer.ProjectInfo) {
+	writeTechStackConcise(b, info)
+	writeCommands(b, info)
+	writeCodeStyle(b, info)
+	writeStructureAnnotated(b, info)
+	writeKeyFiles(b, info)
+	writeConventions(b, info)
+	writeRules(b, info)
+	writeTesting(b, info)
+	writePlaceholder(b, "Workflow", "Add git workflow, branch naming, PR conventions here")
+	writePlaceholder(b, "Architecture", "Add key design decisions here")
+	writeFooter(b)
 }
 
 func generateCursor(info *analyzer.ProjectInfo) string {
@@ -163,6 +173,23 @@ func generateCline(info *analyzer.ProjectInfo) string {
 
 func generateWindsurf(info *analyzer.ProjectInfo) string {
 	return generateCursor(info)
+}
+
+func generateAntigravity(info *analyzer.ProjectInfo) string {
+	var b strings.Builder
+
+	name := info.Name
+	if name == "" {
+		name = "Project"
+	}
+	b.WriteString(fmt.Sprintf("# GEMINI.md - %s\n\n", name))
+	if info.Description != "" {
+		b.WriteString(info.Description + "\n\n")
+	}
+
+	writeAgentBody(&b, info)
+
+	return b.String()
 }
 
 func writeHeader(b *strings.Builder, info *analyzer.ProjectInfo, isClaude bool) {

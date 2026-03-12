@@ -79,10 +79,12 @@ func parseCommonFlags(args []string) (targetDir string, format generator.Format,
 					format = generator.FormatCline
 				case "windsurf":
 					format = generator.FormatWindsurf
+				case "antigravity":
+					format = generator.FormatAntigravity
 				case "all":
 					format = generator.FormatAll
 				default:
-					return "", "", fmt.Errorf("unknown format: %s (use: claude, cursor, agents, cursor-mdc, cline, windsurf, both, all)", args[i+1])
+					return "", "", fmt.Errorf("unknown format: %s (use: claude, cursor, agents, cursor-mdc, cline, windsurf, antigravity, both, all)", args[i+1])
 				}
 				i++
 			}
@@ -363,6 +365,9 @@ func detectExistingFormats(dir string) []generator.Format {
 	if analyzer.FileExists(filepath.Join(dir, ".windsurfrules")) {
 		formats = append(formats, generator.FormatWindsurf)
 	}
+	if analyzer.FileExists(filepath.Join(dir, ".gemini", "GEMINI.md")) {
+		formats = append(formats, generator.FormatAntigravity)
+	}
 	return formats
 }
 
@@ -420,7 +425,7 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println(ui.Bold.Render("Flags:"))
 	fmt.Println("  -d, --dir <path>       Target directory (default: current directory)")
-	fmt.Println("  -f, --format <type>    Output format: claude, cursor, agents, cursor-mdc, cline, windsurf, both, all (default: both)")
+	fmt.Println("  -f, --format <type>    Output format: claude, cursor, agents, cursor-mdc, cline, windsurf, antigravity, both, all (default: both)")
 	fmt.Println("  -o, --output <path>    Output directory (default: scanned directory)")
 	fmt.Println("      --dry-run          Preview without writing (init only)")
 	fmt.Println("      --force            Overwrite everything, skip smart merge (update only)")

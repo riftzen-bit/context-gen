@@ -224,11 +224,12 @@ func promptFormat(scanner *bufio.Scanner) generator.Format {
 	fmt.Println("  4. Cursor MDC (.cursor/rules/)")
 	fmt.Println("  5. Cline (.clinerules)")
 	fmt.Println("  6. Windsurf (.windsurfrules)")
-	fmt.Println("  7. Both (Claude + Cursor)")
-	fmt.Println("  8. All formats")
+	fmt.Println("  7. Antigravity (.gemini/GEMINI.md)")
+	fmt.Println("  8. Both (Claude + Cursor)")
+	fmt.Println("  9. All formats")
 	fmt.Println()
 
-	choice := promptChoice(scanner, "> ", 1, 8)
+	choice := promptChoice(scanner, "> ", 1, 9)
 
 	switch choice {
 	case 1:
@@ -244,8 +245,10 @@ func promptFormat(scanner *bufio.Scanner) generator.Format {
 	case 6:
 		return generator.FormatWindsurf
 	case 7:
-		return generator.FormatBoth
+		return generator.FormatAntigravity
 	case 8:
+		return generator.FormatBoth
+	case 9:
 		return generator.FormatAll
 	default:
 		return generator.FormatBoth
