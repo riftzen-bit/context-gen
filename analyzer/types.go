@@ -31,7 +31,8 @@ type Language struct {
 // DirStructure represents the project's directory layout.
 type DirStructure struct {
 	TopLevelDirs []string
-	EntryPoints  []string // main files, index files
+	SubDirs      map[string][]string // parent dir -> immediate child dirs
+	EntryPoints  []string            // main files, index files
 	ConfigFiles  []string
 	TotalFiles   int
 	TotalDirs    int

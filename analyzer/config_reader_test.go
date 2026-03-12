@@ -113,3 +113,46 @@ func TestReadGoModName_NotFound(t *testing.T) {
 		t.Error("expected empty name for missing file")
 	}
 }
+
+func TestReadEditorConfig_NoGlobalSection(t *testing.T) {
+	style := readEditorConfig(filepath.Join(testdataDir(), "editorconfig_no_global"))
+
+	if style.IndentStyle != "space" {
+		t.Errorf("IndentStyle = %q, want %q", style.IndentStyle, "space")
+	}
+	if style.IndentSize != 2 {
+		t.Errorf("IndentSize = %d, want %d", style.IndentSize, 2)
+	}
+	if style.LineLength != 100 {
+		t.Errorf("LineLength = %d, want %d", style.LineLength, 100)
+	}
+}
+
+func TestReadEditorConfig_OnlyLangSection(t *testing.T) {
+	style := readEditorConfig(filepath.Join(testdataDir(), "editorconfig_only_lang"))
+
+	if style.IndentStyle != "space" {
+		t.Errorf("IndentStyle = %q, want %q", style.IndentStyle, "space")
+	}
+	if style.IndentSize != 4 {
+		t.Errorf("IndentSize = %d, want %d", style.IndentSize, 4)
+	}
+	if style.LineLength != 120 {
+		t.Errorf("LineLength = %d, want %d", style.LineLength, 120)
+	}
+}
+
+func TestReadEditorConfig_GlobalSectionTakesPriority(t *testing.T) {
+	// editorconfig_sample has [*] with tab/4/120 — verify [*] values are used
+	style := readEditorConfig(filepath.Join(testdataDir(), "editorconfig_sample"))
+
+	if style.IndentStyle != "tab" {
+		t.Errorf("IndentStyle = %q, want %q (from [*] section)", style.IndentStyle, "tab")
+	}
+	if style.IndentSize != 4 {
+		t.Errorf("IndentSize = %d, want %d (from [*] section)", style.IndentSize, 4)
+	}
+	if style.LineLength != 120 {
+		t.Errorf("LineLength = %d, want %d (from [*] section)", style.LineLength, 120)
+	}
+}

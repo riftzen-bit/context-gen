@@ -98,7 +98,12 @@ func TestPromptFormat(t *testing.T) {
 	}{
 		{"claude", "1\n", "claude"},
 		{"cursor", "2\n", "cursor"},
-		{"both", "3\n", "both"},
+		{"agents", "3\n", "agents"},
+		{"cursor-mdc", "4\n", "cursor-mdc"},
+		{"cline", "5\n", "cline"},
+		{"windsurf", "6\n", "windsurf"},
+		{"both", "7\n", "both"},
+		{"all", "8\n", "all"},
 	}
 
 	for _, tt := range tests {

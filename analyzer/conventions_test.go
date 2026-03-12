@@ -337,6 +337,31 @@ def do_something():
 	}
 }
 
+func TestDetectFunctionNaming_PythonSingleWord(t *testing.T) {
+	contents := []fileContent{
+		{
+			info: FileInfo{Extension: "py"},
+			content: `def setup():
+    pass
+
+def main():
+    pass
+
+def run():
+    pass
+`,
+		},
+	}
+
+	conventions := detectFunctionNaming(contents)
+
+	for _, c := range conventions {
+		if c.Description == "Python functions use snake_case naming" {
+			t.Error("single-word Python functions should not produce snake_case convention")
+		}
+	}
+}
+
 func TestDetectErrorHandling_Go(t *testing.T) {
 	contents := []fileContent{
 		{

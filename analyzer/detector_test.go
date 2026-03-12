@@ -52,12 +52,38 @@ func TestDetectLanguages(t *testing.T) {
 			wantLangs: map[string]bool{"Python": true},
 		},
 		{
-			name: "TypeScript React",
+			name: "TypeScript and TSX merge into TypeScript",
 			files: []FileInfo{
 				{Name: "App.tsx", Extension: "tsx"},
+				{Name: "Button.tsx", Extension: "tsx"},
 				{Name: "index.ts", Extension: "ts"},
 			},
-			wantLangs: map[string]bool{"TypeScript (React)": true, "TypeScript": true},
+			wantLangs: map[string]bool{"TypeScript": true},
+			wantFirst: "TypeScript",
+		},
+		{
+			name: "TSX only merges into TypeScript",
+			files: []FileInfo{
+				{Name: "App.tsx", Extension: "tsx"},
+			},
+			wantLangs: map[string]bool{"TypeScript": true},
+		},
+		{
+			name: "JSX only merges into JavaScript",
+			files: []FileInfo{
+				{Name: "App.jsx", Extension: "jsx"},
+			},
+			wantLangs: map[string]bool{"JavaScript": true},
+		},
+		{
+			name: "JS and JSX merge into JavaScript",
+			files: []FileInfo{
+				{Name: "app.js", Extension: "js"},
+				{Name: "App.jsx", Extension: "jsx"},
+				{Name: "Button.jsx", Extension: "jsx"},
+			},
+			wantLangs: map[string]bool{"JavaScript": true},
+			wantFirst: "JavaScript",
 		},
 	}
 
@@ -126,6 +152,232 @@ func TestDetectLanguages_Percentages(t *testing.T) {
 	}
 	if pyLang.Percentage != 25.0 {
 		t.Errorf("Python Percentage = %f, want 25.0", pyLang.Percentage)
+	}
+}
+
+func TestDetectLanguages_MergedCounts(t *testing.T) {
+	scan := &ScanResult{
+		Files: []FileInfo{
+			{Name: "index.ts", Extension: "ts"},
+			{Name: "utils.ts", Extension: "ts"},
+			{Name: "App.tsx", Extension: "tsx"},
+			{Name: "Button.tsx", Extension: "tsx"},
+			{Name: "Card.tsx", Extension: "tsx"},
+		},
+	}
+
+	langs := detectLanguages(scan)
+
+	if len(langs) != 1 {
+		t.Fatalf("expected 1 language, got %d: %v", len(langs), langs)
+	}
+	if langs[0].Name != "TypeScript" {
+		t.Errorf("Name = %q, want TypeScript", langs[0].Name)
+	}
+	if langs[0].FileCount != 5 {
+		t.Errorf("FileCount = %d, want 5 (2 ts + 3 tsx merged)", langs[0].FileCount)
+	}
+	if langs[0].Percentage != 100.0 {
+		t.Errorf("Percentage = %f, want 100.0", langs[0].Percentage)
+	}
+}
+
+func TestDetectFromConfigs_Tauri(t *testing.T) {
+	root := t.TempDir()
+
+	cargoToml := `[package]
+name = "my-tauri-app"
+version = "0.1.0"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+`
+	writeFile(t, root, "Cargo.toml", cargoToml)
+
+	scan := &ScanResult{
+		Files: []FileInfo{
+			{Name: "Cargo.toml", Path: "Cargo.toml", Extension: "toml", IsConfig: true},
+		},
+	}
+
+	info := &ProjectInfo{PackageManagers: make(map[string]string)}
+	detectFromConfigs(root, scan, info)
+
+	if !contains(info.BuildTools, "Cargo") {
+		t.Error("expected Cargo in BuildTools")
+	}
+	if !contains(info.Frameworks, "Tauri") {
+		t.Error("expected Tauri in Frameworks")
+	}
+}
+
+func TestDetectFromConfigs_TauriFromPackageJSON(t *testing.T) {
+	root := t.TempDir()
+
+	pkgJSON := `{
+		"dependencies": {
+			"@tauri-apps/api": "^2.0.0"
+		},
+		"devDependencies": {
+			"@tauri-apps/cli": "^2.0.0"
+		}
+	}`
+	writeFile(t, root, "package.json", pkgJSON)
+
+	scan := &ScanResult{
+		Files: []FileInfo{
+			{Name: "package.json", Path: "package.json", Extension: "json", IsConfig: true},
+		},
+	}
+
+	info := &ProjectInfo{PackageManagers: make(map[string]string)}
+	detectFromConfigs(root, scan, info)
+
+	if !contains(info.Frameworks, "Tauri") {
+		t.Error("expected Tauri in Frameworks from @tauri-apps/api or @tauri-apps/cli")
+	}
+}
+
+func TestDetectFromConfigs_CargoTauriCommentFalsePositive(t *testing.T) {
+	root := t.TempDir()
+
+	cargoToml := `[package]
+name = "my-rust-app"
+version = "0.1.0"
+# TODO: maybe add tauri later for desktop support
+
+[dependencies]
+serde = "1"
+tokio = { version = "1", features = ["full"] }
+`
+	writeFile(t, root, "Cargo.toml", cargoToml)
+
+	scan := &ScanResult{
+		Files: []FileInfo{
+			{Name: "Cargo.toml", Path: "Cargo.toml", Extension: "toml", IsConfig: true},
+		},
+	}
+
+	info := &ProjectInfo{PackageManagers: make(map[string]string)}
+	detectFromConfigs(root, scan, info)
+
+	if contains(info.Frameworks, "Tauri") {
+		t.Error("Tauri should NOT be detected when 'tauri' only appears in a comment")
+	}
+}
+
+func TestDetectFromConfigs_CargoWithoutTauri(t *testing.T) {
+	root := t.TempDir()
+
+	cargoToml := `[package]
+name = "my-rust-app"
+version = "0.1.0"
+
+[dependencies]
+serde = "1"
+tokio = { version = "1", features = ["full"] }
+`
+	writeFile(t, root, "Cargo.toml", cargoToml)
+
+	scan := &ScanResult{
+		Files: []FileInfo{
+			{Name: "Cargo.toml", Path: "Cargo.toml", Extension: "toml", IsConfig: true},
+		},
+	}
+
+	info := &ProjectInfo{PackageManagers: make(map[string]string)}
+	detectFromConfigs(root, scan, info)
+
+	if !contains(info.BuildTools, "Cargo") {
+		t.Error("expected Cargo in BuildTools")
+	}
+	if contains(info.Frameworks, "Tauri") {
+		t.Error("Tauri should NOT be detected without tauri dependency")
+	}
+}
+
+func TestBuildStructure_SubDirs(t *testing.T) {
+	scan := &ScanResult{
+		TotalFiles: 3,
+		TotalDirs:  5,
+		Files: []FileInfo{
+			{Name: "main.go", Path: "main.go"},
+			{Name: "handler.go", Path: "pkg/handler.go"},
+			{Name: "Button.tsx", Path: "src/components/Button.tsx"},
+		},
+		Dirs: []string{
+			"src",
+			filepath.Join("src", "components"),
+			filepath.Join("src", "hooks"),
+			"pkg",
+			filepath.Join("pkg", "sub"),
+		},
+	}
+
+	ds := buildStructure(scan)
+
+	if ds.SubDirs == nil {
+		t.Fatal("SubDirs should not be nil")
+	}
+
+	srcSubs, ok := ds.SubDirs["src"]
+	if !ok {
+		t.Fatal("expected SubDirs to have 'src' key")
+	}
+	subSet := map[string]bool{}
+	for _, s := range srcSubs {
+		subSet[s] = true
+	}
+	if !subSet["components"] {
+		t.Error("expected 'components' in SubDirs['src']")
+	}
+	if !subSet["hooks"] {
+		t.Error("expected 'hooks' in SubDirs['src']")
+	}
+
+	pkgSubs, ok := ds.SubDirs["pkg"]
+	if !ok {
+		t.Fatal("expected SubDirs to have 'pkg' key")
+	}
+	if len(pkgSubs) != 1 || pkgSubs[0] != "sub" {
+		t.Errorf("SubDirs['pkg'] = %v, want [sub]", pkgSubs)
+	}
+}
+
+func TestDetectFormatter_ESLintFallback(t *testing.T) {
+	root := t.TempDir()
+
+	writeFile(t, root, "eslint.config.js", "module.exports = {}")
+
+	scan := &ScanResult{
+		Files: []FileInfo{
+			{Name: "eslint.config.js", Path: "eslint.config.js", Extension: "js", IsConfig: true},
+		},
+	}
+
+	formatter := detectFormatter(root, "TypeScript", scan)
+	if formatter != "eslint" {
+		t.Errorf("formatter = %q, want %q", formatter, "eslint")
+	}
+}
+
+func TestDetectFormatter_PrettierOverESLint(t *testing.T) {
+	root := t.TempDir()
+
+	writeFile(t, root, ".prettierrc", "{}")
+	writeFile(t, root, "eslint.config.js", "module.exports = {}")
+
+	scan := &ScanResult{
+		Files: []FileInfo{
+			{Name: ".prettierrc", Path: ".prettierrc", Extension: "", IsConfig: true},
+			{Name: "eslint.config.js", Path: "eslint.config.js", Extension: "js", IsConfig: true},
+		},
+	}
+
+	formatter := detectFormatter(root, "TypeScript", scan)
+	if formatter != "prettier" {
+		t.Errorf("formatter = %q, want %q (prettier should take priority over eslint)", formatter, "prettier")
 	}
 }
 

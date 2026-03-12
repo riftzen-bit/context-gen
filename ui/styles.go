@@ -4,10 +4,11 @@ import (
 	"os"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/term"
 	"github.com/mattn/go-isatty"
 )
 
-const Version = "v0.2.0"
+const Version = "v0.4.0"
 
 var (
 	// Colors
@@ -58,11 +59,20 @@ func IsTTY() bool {
 
 // TermWidth returns the terminal width, defaulting to 80 if detection fails.
 func TermWidth() int {
-	w := lipgloss.Width(BannerStyle.Render(""))
-	if w <= 0 {
+	w, _, err := term.GetSize(os.Stdout.Fd())
+	if err != nil || w <= 0 {
 		return 80
 	}
 	return w
+}
+
+// TermHeight returns the terminal height, defaulting to 24 if detection fails.
+func TermHeight() int {
+	_, h, err := term.GetSize(os.Stdout.Fd())
+	if err != nil || h <= 0 {
+		return 24
+	}
+	return h
 }
 
 // FormatFileCreated formats a file creation message.

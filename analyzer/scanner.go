@@ -22,8 +22,6 @@ var skipDirs = map[string]bool{
 	".vscode":      true,
 	"coverage":     true,
 	".cache":       true,
-	"bin":          true,
-	"obj":          true,
 }
 
 // ScanResult holds raw scan data before analysis.
@@ -88,11 +86,14 @@ var configFiles = map[string]bool{
 	"readme.md":         true,
 	"README":            true,
 	"rustfmt.toml":      true,
+	"tauri.conf.json":   true,
 }
 
 // Scan walks the project directory and collects file metadata.
+// Respects .gitignore patterns in addition to the default skip list.
 func Scan(root string) (*ScanResult, error) {
 	result := &ScanResult{}
+	gi := ParseGitIgnore(root)
 
 	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -105,10 +106,19 @@ func Scan(root string) (*ScanResult, error) {
 			if skipDirs[d.Name()] {
 				return filepath.SkipDir
 			}
+			// Check .gitignore for directories
+			if rel != "." && gi.IsIgnored(rel, true) {
+				return filepath.SkipDir
+			}
 			if rel != "." {
 				result.Dirs = append(result.Dirs, rel)
 				result.TotalDirs++
 			}
+			return nil
+		}
+
+		// Check .gitignore for files
+		if gi.IsIgnored(rel, false) {
 			return nil
 		}
 

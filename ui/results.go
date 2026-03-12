@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/paul/context-gen/analyzer"
+	"github.com/riftzen-bit/context-gen/analyzer"
 )
 
 // FormatResults formats detection results as a styled box.

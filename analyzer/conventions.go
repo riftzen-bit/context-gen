@@ -254,7 +254,7 @@ func detectFunctionNaming(contents []fileContent) []Convention {
 			sMatches := pyFuncSnake.FindAllStringSubmatch(fc.content, -1)
 			for _, m := range sMatches {
 				// Exclude camelCase matches from snake_case count.
-				if !strings.ContainsAny(m[1], "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+				if !strings.ContainsAny(m[1], "ABCDEFGHIJKLMNOPQRSTUVWXYZ") && strings.Contains(m[1], "_") {
 					snakeCount++
 					if len(snakeExamples) < 2 {
 						snakeExamples = append(snakeExamples, m[1])

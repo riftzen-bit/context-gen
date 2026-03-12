@@ -9,8 +9,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/paul/context-gen/generator"
-	"github.com/paul/context-gen/ui"
+	"github.com/riftzen-bit/context-gen/generator"
+	"github.com/riftzen-bit/context-gen/ui"
 )
 
 // reader is the input source for interactive prompts (fallback mode).
@@ -112,13 +112,16 @@ func interactivePreviewTUI() {
 }
 
 func promptDirTUI() string {
-	m := ui.NewDirPromptModel(".")
-	p := tea.NewProgram(m)
-	result, err := p.Run()
-	if err != nil {
+	fmt.Printf("\n%s [.]: ", ui.Bold.Render("Target directory"))
+	scanner := newScanner()
+	if !scanner.Scan() {
 		return "."
 	}
-	return result.(ui.DirPromptModel).Value()
+	input := strings.TrimSpace(scanner.Text())
+	if input == "" {
+		return "."
+	}
+	return input
 }
 
 func promptFormatTUI() string {
@@ -217,16 +220,33 @@ func promptFormat(scanner *bufio.Scanner) generator.Format {
 	fmt.Println()
 	fmt.Println("  1. Claude (CLAUDE.md)")
 	fmt.Println("  2. Cursor (.cursorrules)")
-	fmt.Println("  3. Both")
+	fmt.Println("  3. GitHub Copilot (AGENTS.md)")
+	fmt.Println("  4. Cursor MDC (.cursor/rules/)")
+	fmt.Println("  5. Cline (.clinerules)")
+	fmt.Println("  6. Windsurf (.windsurfrules)")
+	fmt.Println("  7. Both (Claude + Cursor)")
+	fmt.Println("  8. All formats")
 	fmt.Println()
 
-	choice := promptChoice(scanner, "> ", 1, 3)
+	choice := promptChoice(scanner, "> ", 1, 8)
 
 	switch choice {
 	case 1:
 		return generator.FormatClaude
 	case 2:
 		return generator.FormatCursor
+	case 3:
+		return generator.FormatAgents
+	case 4:
+		return generator.FormatCursorMDC
+	case 5:
+		return generator.FormatCline
+	case 6:
+		return generator.FormatWindsurf
+	case 7:
+		return generator.FormatBoth
+	case 8:
+		return generator.FormatAll
 	default:
 		return generator.FormatBoth
 	}

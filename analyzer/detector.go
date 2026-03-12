@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -36,6 +37,8 @@ var languageMap = map[string]string{
 	"bash":  "Shell",
 	"sql":   "SQL",
 }
+
+var tauriDepRegex = regexp.MustCompile(`(?m)^tauri\s*[=\{]`)
 
 // Detect analyzes scan results and builds a ProjectInfo.
 func Detect(root string, scan *ScanResult) (*ProjectInfo, error) {
@@ -81,6 +84,25 @@ func detectLanguages(scan *ScanResult) []Language {
 		}
 	}
 
+	// Merge TypeScript variants: "TypeScript (React)" -> "TypeScript"
+	if tsxCount, ok := counts["TypeScript (React)"]; ok {
+		counts["TypeScript"] += tsxCount
+		delete(counts, "TypeScript (React)")
+		if _, hasExt := extMap["TypeScript"]; !hasExt {
+			extMap["TypeScript"] = "tsx"
+		}
+		delete(extMap, "TypeScript (React)")
+	}
+	// Merge JavaScript variants: "JavaScript (React)" -> "JavaScript"
+	if jsxCount, ok := counts["JavaScript (React)"]; ok {
+		counts["JavaScript"] += jsxCount
+		delete(counts, "JavaScript (React)")
+		if _, hasExt := extMap["JavaScript"]; !hasExt {
+			extMap["JavaScript"] = "jsx"
+		}
+		delete(extMap, "JavaScript (React)")
+	}
+
 	total := 0
 	for _, c := range counts {
 		total += c
@@ -107,12 +129,22 @@ func buildStructure(scan *ScanResult) DirStructure {
 	ds := DirStructure{
 		TotalFiles: scan.TotalFiles,
 		TotalDirs:  scan.TotalDirs,
+		SubDirs:    make(map[string][]string),
 	}
 
 	topLevel := make(map[string]bool)
 	for _, d := range scan.Dirs {
 		parts := strings.SplitN(d, string(filepath.Separator), 2)
 		topLevel[parts[0]] = true
+
+		// Populate SubDirs for 2-level paths (e.g. "src/components" -> SubDirs["src"] = ["components"])
+		if len(parts) == 2 {
+			child := parts[1]
+			// Only include immediate children (no deeper nesting)
+			if !strings.Contains(child, string(filepath.Separator)) {
+				ds.SubDirs[parts[0]] = append(ds.SubDirs[parts[0]], child)
+			}
+		}
 	}
 	for d := range topLevel {
 		ds.TopLevelDirs = append(ds.TopLevelDirs, d)
@@ -160,6 +192,13 @@ func detectFromConfigs(root string, scan *ScanResult, info *ProjectInfo) {
 
 		case "Cargo.toml":
 			info.BuildTools = appendUnique(info.BuildTools, "Cargo")
+			data, err := os.ReadFile(filepath.Join(root, f.Path))
+			if err == nil {
+				content := string(data)
+				if tauriDepRegex.MatchString(content) || strings.Contains(content, `"tauri"`) {
+					info.Frameworks = appendUnique(info.Frameworks, "Tauri")
+				}
+			}
 
 		case "pyproject.toml":
 			info.BuildTools = appendUnique(info.BuildTools, "pyproject")
@@ -224,6 +263,9 @@ func detectFromConfigs(root string, scan *ScanResult, info *ProjectInfo) {
 		case "deno.json":
 			info.BuildTools = appendUnique(info.BuildTools, "Deno")
 			info.PackageManagers["js"] = "deno"
+
+		case "tauri.conf.json":
+			info.Frameworks = appendUnique(info.Frameworks, "Tauri")
 		}
 	}
 }
@@ -241,11 +283,11 @@ func detectFromPackageJSON(root, path string, info *ProjectInfo) {
 
 	// Detect JS package manager
 	if info.PackageManagers["js"] == "" {
-		if fileExists(filepath.Join(root, "bun.lockb")) {
+		if FileExists(filepath.Join(root, "bun.lockb")) {
 			info.PackageManagers["js"] = "bun"
-		} else if fileExists(filepath.Join(root, "pnpm-lock.yaml")) {
+		} else if FileExists(filepath.Join(root, "pnpm-lock.yaml")) {
 			info.PackageManagers["js"] = "pnpm"
-		} else if fileExists(filepath.Join(root, "yarn.lock")) {
+		} else if FileExists(filepath.Join(root, "yarn.lock")) {
 			info.PackageManagers["js"] = "yarn"
 		} else {
 			info.PackageManagers["js"] = "npm"
@@ -268,7 +310,9 @@ func detectFromPackageJSON(root, path string, info *ProjectInfo) {
 		"remix":       "Remix",
 		"astro":       "Astro",
 		"gatsby":      "Gatsby",
-		"electron":    "Electron",
+		"electron":        "Electron",
+		"@tauri-apps/cli": "Tauri",
+		"@tauri-apps/api": "Tauri",
 	}
 	for dep, name := range frameworkChecks {
 		if _, ok := allDeps[dep]; ok {
@@ -373,7 +417,7 @@ func detectDocker(scan *ScanResult, info *ProjectInfo) {
 	}
 }
 
-func fileExists(path string) bool {
+func FileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }

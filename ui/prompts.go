@@ -16,7 +16,12 @@ type FormatSelectModel struct {
 var formatOptions = []string{
 	"Claude (CLAUDE.md)",
 	"Cursor (.cursorrules)",
-	"Both",
+	"GitHub Copilot (AGENTS.md)",
+	"Cursor MDC (.cursor/rules/)",
+	"Cline (.clinerules)",
+	"Windsurf (.windsurfrules)",
+	"Both (Claude + Cursor)",
+	"All formats",
 }
 
 // NewFormatSelectModel creates a format selection prompt.
@@ -31,6 +36,18 @@ func (m FormatSelectModel) SelectedFormat() string {
 		return "claude"
 	case 1:
 		return "cursor"
+	case 2:
+		return "agents"
+	case 3:
+		return "cursor-mdc"
+	case 4:
+		return "cline"
+	case 5:
+		return "windsurf"
+	case 6:
+		return "both"
+	case 7:
+		return "all"
 	default:
 		return "both"
 	}
@@ -86,59 +103,3 @@ func (m FormatSelectModel) View() string {
 	return s
 }
 
-// DirPromptModel is a bubbletea model for directory input.
-type DirPromptModel struct {
-	input    string
-	defVal   string
-	done     bool
-	quitting bool
-}
-
-// NewDirPromptModel creates a directory prompt with a default value.
-func NewDirPromptModel(defaultVal string) DirPromptModel {
-	return DirPromptModel{
-		defVal: defaultVal,
-	}
-}
-
-// Value returns the entered directory or default.
-func (m DirPromptModel) Value() string {
-	if m.input == "" {
-		return m.defVal
-	}
-	return m.input
-}
-
-func (m DirPromptModel) Init() tea.Cmd {
-	return nil
-}
-
-func (m DirPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c":
-			m.quitting = true
-			return m, tea.Quit
-		case "enter":
-			m.done = true
-			return m, tea.Quit
-		case "backspace":
-			if len(m.input) > 0 {
-				m.input = m.input[:len(m.input)-1]
-			}
-		default:
-			if len(msg.String()) == 1 {
-				m.input += msg.String()
-			}
-		}
-	}
-
-	return m, nil
-}
-
-func (m DirPromptModel) View() string {
-	prompt := "\n" + Bold.Render("Target directory") + " [" + m.defVal + "]: "
-	cursor := "█"
-	return prompt + m.input + cursor + "\n"
-}

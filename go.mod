@@ -1,4 +1,4 @@
-module github.com/paul/context-gen
+module github.com/riftzen-bit/context-gen
 
 go 1.26.1
 

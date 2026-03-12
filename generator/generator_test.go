@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/paul/context-gen/analyzer"
+	"github.com/riftzen-bit/context-gen/analyzer"
 )
 
 func TestGenerate_ClaudeFormat(t *testing.T) {
@@ -52,6 +52,11 @@ func TestGenerate_ClaudeFormat(t *testing.T) {
 	// Claude format should have Architecture placeholder
 	if !strings.Contains(content, "## Architecture") {
 		t.Error("missing Architecture placeholder section")
+	}
+
+	// Claude format should have Testing section
+	if !strings.Contains(content, "## Testing") {
+		t.Error("missing Testing section")
 	}
 
 	// Should NOT have the old verbose sections
@@ -175,6 +180,87 @@ func TestWriteTechStackConcise(t *testing.T) {
 
 	if !strings.Contains(output, "Go | Echo | Docker | GitHub Actions") {
 		t.Errorf("expected pipe-separated tech stack, got:\n%s", output)
+	}
+}
+
+func TestWriteTechStackConcise_MultipleLanguages(t *testing.T) {
+	// After analyzer merge, React variants are folded into base language names.
+	// Framework "React" appears separately in Frameworks.
+	info := &analyzer.ProjectInfo{
+		Languages: []analyzer.Language{
+			{Name: "TypeScript", FileCount: 32, Percentage: 80},
+			{Name: "Rust", FileCount: 8, Percentage: 20},
+		},
+		Frameworks: []string{"React"},
+		HasCI:      true,
+		CIProvider: "GitHub Actions",
+	}
+
+	var b strings.Builder
+	writeTechStackConcise(&b, info)
+	output := b.String()
+
+	if !strings.Contains(output, "TypeScript | Rust | React | GitHub Actions") {
+		t.Errorf("expected merged languages in tech stack, got:\n%s", output)
+	}
+}
+
+func TestWriteTesting_GoProject(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		Languages: []analyzer.Language{
+			{Name: "Go", FileCount: 10, Percentage: 100},
+		},
+		PackageManagers: map[string]string{},
+	}
+
+	var b strings.Builder
+	writeTesting(&b, info)
+	output := b.String()
+
+	if !strings.Contains(output, "## Testing") {
+		t.Error("missing Testing section")
+	}
+	if !strings.Contains(output, "go test ./...") {
+		t.Error("missing go test all command")
+	}
+	if !strings.Contains(output, "-run TestFunc") {
+		t.Error("missing single test command")
+	}
+}
+
+func TestWriteTesting_JSProject(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		Languages: []analyzer.Language{
+			{Name: "TypeScript", FileCount: 10, Percentage: 100},
+		},
+		TestTools:       []string{"Vitest"},
+		PackageManagers: map[string]string{"js": "pnpm"},
+	}
+
+	var b strings.Builder
+	writeTesting(&b, info)
+	output := b.String()
+
+	if !strings.Contains(output, "Vitest") {
+		t.Error("missing test framework name")
+	}
+	if !strings.Contains(output, "pnpm run test") {
+		t.Error("missing pnpm test command")
+	}
+}
+
+func TestWriteTesting_Empty(t *testing.T) {
+	info := &analyzer.ProjectInfo{}
+
+	var b strings.Builder
+	writeTesting(&b, info)
+	output := b.String()
+
+	if !strings.Contains(output, "## Testing") {
+		t.Error("missing Testing section")
+	}
+	if !strings.Contains(output, "# Add test commands here") {
+		t.Error("expected placeholder for unknown project")
 	}
 }
 
@@ -510,6 +596,298 @@ func TestHasJSLang(t *testing.T) {
 	}
 }
 
+func TestWriteStructureAnnotated_WithSubDirs(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		Structure: analyzer.DirStructure{
+			TopLevelDirs: []string{"cmd", "src", "docs"},
+			SubDirs: map[string][]string{
+				"src": {"components", "utils", "pages"},
+				"cmd": {"server", "cli"},
+			},
+		},
+	}
+
+	var b strings.Builder
+	writeStructureAnnotated(&b, info)
+	output := b.String()
+
+	if !strings.Contains(output, "## Project Structure") {
+		t.Error("missing Project Structure section")
+	}
+	// cmd/ should have annotation and subdirs
+	if !strings.Contains(output, "CLI entry points") {
+		t.Error("missing annotation for cmd/")
+	}
+	if !strings.Contains(output, "  cli/") {
+		t.Errorf("missing subdir cli/ under cmd/, got:\n%s", output)
+	}
+	if !strings.Contains(output, "  server/") {
+		t.Errorf("missing subdir server/ under cmd/, got:\n%s", output)
+	}
+	// src/ should have subdirs sorted alphabetically
+	if !strings.Contains(output, "  components/") {
+		t.Errorf("missing subdir components/ under src/, got:\n%s", output)
+	}
+	if !strings.Contains(output, "  pages/") {
+		t.Errorf("missing subdir pages/ under src/, got:\n%s", output)
+	}
+	if !strings.Contains(output, "  utils/") {
+		t.Errorf("missing subdir utils/ under src/, got:\n%s", output)
+	}
+	// docs/ has no subdirs - should not have indented lines after it
+	docsIdx := strings.Index(output, "docs/")
+	if docsIdx == -1 {
+		t.Error("missing docs/ directory")
+	}
+}
+
+func TestWriteStructureAnnotated_NilSubDirs(t *testing.T) {
+	// Backward compat: SubDirs may be nil with old analyzer
+	info := &analyzer.ProjectInfo{
+		Structure: analyzer.DirStructure{
+			TopLevelDirs: []string{"cmd", "internal"},
+			SubDirs:      nil,
+		},
+	}
+
+	var b strings.Builder
+	writeStructureAnnotated(&b, info)
+	output := b.String()
+
+	if !strings.Contains(output, "## Project Structure") {
+		t.Error("missing Project Structure section")
+	}
+	if !strings.Contains(output, "cmd/") {
+		t.Error("missing cmd/ dir")
+	}
+	if !strings.Contains(output, "internal/") {
+		t.Error("missing internal/ dir")
+	}
+}
+
+func TestWriteKeyFiles(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		Structure: analyzer.DirStructure{
+			EntryPoints: []string{"main.go", "cmd/server/main.go"},
+		},
+	}
+
+	var b strings.Builder
+	writeKeyFiles(&b, info)
+	output := b.String()
+
+	if !strings.Contains(output, "## Key Files") {
+		t.Error("missing Key Files section")
+	}
+	if !strings.Contains(output, "- `main.go`") {
+		t.Errorf("missing main.go entry point, got:\n%s", output)
+	}
+	if !strings.Contains(output, "- `cmd/server/main.go`") {
+		t.Errorf("missing cmd/server/main.go entry point, got:\n%s", output)
+	}
+}
+
+func TestWriteKeyFiles_Empty(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		Structure: analyzer.DirStructure{
+			EntryPoints: nil,
+		},
+	}
+
+	var b strings.Builder
+	writeKeyFiles(&b, info)
+	output := b.String()
+
+	if output != "" {
+		t.Errorf("expected no output for empty entry points, got:\n%s", output)
+	}
+}
+
+func TestWriteCodeStyle_WithLinters(t *testing.T) {
+	info := &analyzer.ProjectInfo{
+		Linters: []string{"golangci-lint", "eslint"},
+		CodeStyle: analyzer.CodeStyle{
+			IndentStyle: "spaces",
+			IndentSize:  2,
+			Formatter:   "prettier",
+		},
+	}
+
+	var b strings.Builder
+	writeCodeStyle(&b, info)
+	output := b.String()
+
+	if !strings.Contains(output, "- Linters: golangci-lint, eslint") {
+		t.Errorf("expected linters line, got:\n%s", output)
+	}
+	if !strings.Contains(output, "- Formatter: prettier") {
+		t.Error("missing formatter")
+	}
+	if !strings.Contains(output, "- Indent: spaces (2)") {
+		t.Error("missing indent info")
+	}
+}
+
+func TestWriteCodeStyle_LintersOnly(t *testing.T) {
+	// Linters present but no other style info - should not show placeholder
+	info := &analyzer.ProjectInfo{
+		Linters: []string{"ruff"},
+	}
+
+	var b strings.Builder
+	writeCodeStyle(&b, info)
+	output := b.String()
+
+	if !strings.Contains(output, "- Linters: ruff") {
+		t.Errorf("expected linters line, got:\n%s", output)
+	}
+	if strings.Contains(output, "<!-- Add project-specific style rules here -->") {
+		t.Error("should not show placeholder when linters are present")
+	}
+}
+
+func TestGenerate_ClaudeFormat_HasKeyFiles(t *testing.T) {
+	info := buildTestProjectInfo()
+	results := Generate(info, FormatClaude)
+	content := results["CLAUDE.md"]
+
+	if !strings.Contains(content, "## Key Files") {
+		t.Error("CLAUDE.md should contain Key Files section")
+	}
+	if !strings.Contains(content, "- `main.go`") {
+		t.Error("CLAUDE.md should list main.go entry point")
+	}
+}
+
+func TestGenerate_CursorFormat_HasKeyFiles(t *testing.T) {
+	info := buildTestProjectInfo()
+	results := Generate(info, FormatCursor)
+	content := results[".cursorrules"]
+
+	if !strings.Contains(content, "## Key Files") {
+		t.Error(".cursorrules should contain Key Files section")
+	}
+	if !strings.Contains(content, "- `main.go`") {
+		t.Error(".cursorrules should list main.go entry point")
+	}
+}
+
+func TestGenerate_AgentsFormat(t *testing.T) {
+	info := buildTestProjectInfo()
+	results := Generate(info, FormatAgents)
+
+	content, ok := results["AGENTS.md"]
+	if !ok {
+		t.Fatal("expected AGENTS.md in output")
+	}
+	if len(results) != 1 {
+		t.Errorf("expected 1 file, got %d", len(results))
+	}
+	if !strings.HasPrefix(content, "# AGENTS.md") {
+		t.Errorf("expected content to start with '# AGENTS.md', got:\n%s", content[:min(100, len(content))])
+	}
+	// Agents should NOT have Workflow/Architecture placeholders
+	if strings.Contains(content, "## Workflow") {
+		t.Error("AGENTS.md should not have Workflow section")
+	}
+	if strings.Contains(content, "## Architecture") {
+		t.Error("AGENTS.md should not have Architecture section")
+	}
+}
+
+func TestGenerate_CursorMDCFormat(t *testing.T) {
+	info := buildTestProjectInfo()
+	results := Generate(info, FormatCursorMDC)
+
+	content, ok := results[".cursor/rules/project.mdc"]
+	if !ok {
+		t.Fatal("expected .cursor/rules/project.mdc in output")
+	}
+	if len(results) != 1 {
+		t.Errorf("expected 1 file, got %d", len(results))
+	}
+	if !strings.HasPrefix(content, "---\n") {
+		t.Errorf("expected content to start with YAML frontmatter '---', got:\n%s", content[:min(100, len(content))])
+	}
+	if !strings.Contains(content, "alwaysApply: true") {
+		t.Error("expected alwaysApply in frontmatter")
+	}
+	if !strings.Contains(content, "description: Project context and coding guidelines for test-project") {
+		t.Error("expected description in frontmatter")
+	}
+}
+
+func TestGenerate_ClineFormat(t *testing.T) {
+	info := buildTestProjectInfo()
+	results := Generate(info, FormatCline)
+
+	_, ok := results[".clinerules"]
+	if !ok {
+		t.Fatal("expected .clinerules in output")
+	}
+	if len(results) != 1 {
+		t.Errorf("expected 1 file, got %d", len(results))
+	}
+}
+
+func TestGenerate_WindsurfFormat(t *testing.T) {
+	info := buildTestProjectInfo()
+	results := Generate(info, FormatWindsurf)
+
+	_, ok := results[".windsurfrules"]
+	if !ok {
+		t.Fatal("expected .windsurfrules in output")
+	}
+	if len(results) != 1 {
+		t.Errorf("expected 1 file, got %d", len(results))
+	}
+}
+
+func TestGenerate_AllFormat(t *testing.T) {
+	info := buildTestProjectInfo()
+	results := Generate(info, FormatAll)
+
+	expectedKeys := []string{
+		"CLAUDE.md",
+		".cursorrules",
+		"AGENTS.md",
+		".cursor/rules/project.mdc",
+		".clinerules",
+		".windsurfrules",
+	}
+
+	if len(results) != len(expectedKeys) {
+		t.Errorf("expected %d files, got %d", len(expectedKeys), len(results))
+	}
+
+	for _, key := range expectedKeys {
+		if _, ok := results[key]; !ok {
+			t.Errorf("expected %s in output", key)
+		}
+	}
+}
+
+func TestVersionStamp_AllFormats(t *testing.T) {
+	info := buildTestProjectInfo()
+	results := Generate(info, FormatAll)
+
+	for name, content := range results {
+		if !strings.Contains(content, "<!-- Generated by context-gen v") {
+			t.Errorf("%s missing version stamp", name)
+		}
+	}
+}
+
+func TestVersionStamp_Claude(t *testing.T) {
+	info := buildTestProjectInfo()
+	results := Generate(info, FormatClaude)
+	content := results["CLAUDE.md"]
+
+	if !strings.HasSuffix(strings.TrimSpace(content), "-->") {
+		t.Error("version stamp should be the last line in generated output")
+	}
+}
+
 // --- helpers ---
 
 func buildTestProjectInfo() *analyzer.ProjectInfo {
@@ -535,10 +913,13 @@ func buildTestProjectInfo() *analyzer.ProjectInfo {
 		Scripts: nil,
 		Structure: analyzer.DirStructure{
 			TopLevelDirs: []string{"analyzer", "cmd", "generator"},
-			EntryPoints:  []string{"main.go"},
-			ConfigFiles:  []string{"go.mod"},
-			TotalFiles:   12,
-			TotalDirs:    3,
+			SubDirs: map[string][]string{
+				"cmd": {"root"},
+			},
+			EntryPoints: []string{"main.go"},
+			ConfigFiles: []string{"go.mod"},
+			TotalFiles:  12,
+			TotalDirs:   3,
 		},
 		Conventions: []analyzer.Convention{
 			{

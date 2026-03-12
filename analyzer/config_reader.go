@@ -12,7 +12,8 @@ import (
 	"strings"
 )
 
-// readEditorConfig parses a .editorconfig file and returns CodeStyle from the [*] section.
+// readEditorConfig parses a .editorconfig file and returns CodeStyle.
+// Prefers values from the [*] section; falls back to the first language-specific section.
 func readEditorConfig(path string) CodeStyle {
 	f, err := os.Open(path)
 	if err != nil {
@@ -20,10 +21,15 @@ func readEditorConfig(path string) CodeStyle {
 	}
 	defer f.Close()
 
-	var style CodeStyle
-	inGlobal := false
-	scanner := bufio.NewScanner(f)
+	// Parse all sections into ordered structure.
+	type section struct {
+		name   string
+		values map[string]string
+	}
+	var sections []section
+	var current *section
 
+	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 
@@ -32,11 +38,13 @@ func readEditorConfig(path string) CodeStyle {
 		}
 
 		if strings.HasPrefix(line, "[") {
-			inGlobal = line == "[*]"
+			sections = append(sections, section{name: line, values: make(map[string]string)})
+			current = &sections[len(sections)-1]
 			continue
 		}
 
-		if !inGlobal {
+		// Lines before any section header (e.g. "root = true") are ignored.
+		if current == nil {
 			continue
 		}
 
@@ -44,20 +52,41 @@ func readEditorConfig(path string) CodeStyle {
 		if len(parts) != 2 {
 			continue
 		}
-		key := strings.TrimSpace(parts[0])
-		val := strings.TrimSpace(parts[1])
+		current.values[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+	}
 
-		switch key {
-		case "indent_style":
-			style.IndentStyle = val
-		case "indent_size":
-			if n, err := strconv.Atoi(val); err == nil {
-				style.IndentSize = n
+	// Pick section: prefer [*], fall back to first section with values.
+	var chosen map[string]string
+	for _, s := range sections {
+		if s.name == "[*]" {
+			chosen = s.values
+			break
+		}
+	}
+	if chosen == nil {
+		for _, s := range sections {
+			if len(s.values) > 0 {
+				chosen = s.values
+				break
 			}
-		case "max_line_length":
-			if n, err := strconv.Atoi(val); err == nil {
-				style.LineLength = n
-			}
+		}
+	}
+	if chosen == nil {
+		return CodeStyle{}
+	}
+
+	var style CodeStyle
+	if v, ok := chosen["indent_style"]; ok {
+		style.IndentStyle = v
+	}
+	if v, ok := chosen["indent_size"]; ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			style.IndentSize = n
+		}
+	}
+	if v, ok := chosen["max_line_length"]; ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			style.LineLength = n
 		}
 	}
 
@@ -326,6 +355,15 @@ func detectFormatter(root string, primaryLang string, scan *ScanResult) string {
 			return "prettier"
 		case "rustfmt.toml":
 			return "rustfmt"
+		}
+	}
+
+	// Check for ESLint config as fallback formatter for JS/TS
+	for _, f := range scan.Files {
+		switch f.Name {
+		case ".eslintrc", ".eslintrc.js", ".eslintrc.json", ".eslintrc.yml",
+			"eslint.config.js", "eslint.config.mjs", "eslint.config.ts":
+			return "eslint"
 		}
 	}
 

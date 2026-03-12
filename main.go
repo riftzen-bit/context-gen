@@ -3,7 +3,7 @@
 
 package main
 
-import "github.com/paul/context-gen/cmd"
+import "github.com/riftzen-bit/context-gen/cmd"
 
 func main() {
 	cmd.Execute()

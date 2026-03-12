@@ -1,0 +1,22 @@
+# Binary
+context-gen
+context-gen.exe
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Test output
+*.test
+coverage.out
+coverage.html
+
+# Generated context files (for testing)
+*.generated
