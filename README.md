@@ -1,11 +1,12 @@
 <p align="center">
-  <h1 align="center">context-gen</h1>
-  <p align="center">
-    <strong>One scan. Every AI assistant. Zero config.</strong>
-  </p>
-  <p align="center">
-    <a href="#installation">Install</a> · <a href="#quick-start">Quick Start</a> · <a href="#supported-formats">Formats</a> · <a href="#how-it-works">How It Works</a>
-  </p>
+  <img src=".github/social-preview.jpg" alt="context-gen banner" width="100%">
+</p>
+
+<p align="center">
+  <strong>One scan. Every AI assistant. Zero config.</strong>
+</p>
+<p align="center">
+  <a href="#installation">Install</a> · <a href="#quick-start">Quick Start</a> · <a href="#supported-formats">Formats</a> · <a href="#how-it-works">How It Works</a>
 </p>
 
 ---
